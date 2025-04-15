@@ -1,0 +1,6 @@
+[package]
+name = "exercises"
+edition = "2021"
+
+[dependencies]
+flat = { path = "../flat" }

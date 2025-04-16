@@ -1,11 +1,14 @@
-use std::hash::Hash;
+use std::{
+    collections::{BTreeSet, VecDeque},
+    hash::Hash,
+};
 
 use indexmap::{indexmap, IndexMap, IndexSet};
 use uuid::Uuid;
 
 use crate::{language::Symbol, regex::RegularExpression};
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
 pub struct StateId(Uuid);
 
 #[derive(Debug, Clone)]
@@ -35,11 +38,11 @@ pub trait TransitionResult {
 
 #[derive(Debug)]
 pub struct FiniteAutomaton<S: FiniteAutomatonSymbol, T: TransitionResult> {
-    states: IndexMap<StateId, State>,
+    pub states: IndexMap<StateId, State>,
     // pub alphabet: Vec<Symbol>,
-    transitions: IndexMap<StateId, IndexMap<S, T>>,
-    start_state: StateId,
-    final_states: IndexSet<StateId>,
+    pub transitions: IndexMap<StateId, IndexMap<S, T>>,
+    pub start_state: StateId,
+    pub final_states: IndexSet<StateId>,
 }
 
 impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
@@ -108,8 +111,8 @@ impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
             .filter_map(|s| s.name.clone().map(|name| (s.id, name)))
             .collect::<IndexMap<_, _>>();
 
-        let mut state_idx = 0;
-        let mut get_state_name = |id: &StateId| {
+        let mut state_idx = 1;
+        let mut name_state = |id: &StateId| {
             state_names
                 .entry(*id)
                 .or_insert_with(|| {
@@ -120,8 +123,33 @@ impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
                 .clone()
         };
 
-        for state_id in self.states.keys() {
-            let state_name = get_state_name(state_id);
+        let mut visited = IndexSet::new();
+        let mut stack = vec![self.start_state];
+
+        // Name states in order of traversal
+        while let Some(state) = stack.pop() {
+            if visited.insert(state) {
+                name_state(&state);
+
+                if let Some(transitions) = self.transitions.get(&state) {
+                    for next_states in transitions.values() {
+                        for next_state in next_states.states() {
+                            stack.push(next_state);
+                        }
+                    }
+                }
+            }
+        }
+
+        for state in self.states.keys() {
+            if !visited.contains(state) {
+                name_state(state);
+            }
+        }
+
+        let mut get_state_name = |id: &StateId| state_names.get(id).unwrap().clone();
+
+        for (state_id, state_name) in &state_names {
             let state_transitions = self.transitions.get(state_id);
 
             table.push_str(&format!("|{}|", {
@@ -152,6 +180,97 @@ impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
 
         table
     }
+
+    pub fn definition(&self) -> String {
+        let mut definition = "#states\n".to_owned();
+
+        let mut state_names = self
+            .states
+            .values()
+            .filter_map(|s| s.name.clone().map(|name| (s.id, name)))
+            .collect::<IndexMap<_, _>>();
+
+        let mut state_idx = 1;
+        let mut name_state = |id: &StateId| {
+            state_names
+                .entry(*id)
+                .or_insert_with(|| {
+                    let name = format!("q{}", state_idx);
+                    state_idx += 1;
+                    name
+                })
+                .clone()
+        };
+
+        let mut visited = IndexSet::new();
+        let mut stack = vec![self.start_state];
+
+        // Name states in order of traversal
+        while let Some(state) = stack.pop() {
+            if visited.insert(state) {
+                name_state(&state);
+
+                if let Some(transitions) = self.transitions.get(&state) {
+                    for next_states in transitions.values() {
+                        for next_state in next_states.states() {
+                            stack.push(next_state);
+                        }
+                    }
+                }
+            }
+        }
+
+        for state in self.states.keys() {
+            if !visited.contains(state) {
+                name_state(state);
+            }
+        }
+
+        for state_name in state_names.values() {
+            definition.push_str(&format!("{}\n", state_name));
+        }
+
+        definition.push_str(&format!("#initial\n{}\n", state_names[&self.start_state]));
+        definition.push_str("#accepting\n");
+        for state_id in &self.final_states {
+            definition.push_str(&format!("{}\n", state_names[state_id]));
+        }
+
+        let symbols = self
+            .transitions
+            .values()
+            .flat_map(|map| map.keys().map(|s| (s.as_str(), s)))
+            .collect::<IndexMap<_, _>>();
+
+        definition.push_str("#alphabet\n");
+        for symbol in symbols.keys() {
+            definition.push_str(&format!("{}\n", symbol));
+        }
+
+        definition.push_str("#transitions\n");
+        for (state, state_transitions) in &self.transitions {
+            let state_name = state_names[state].clone();
+            for (symbol, next_states) in state_transitions {
+                let symbol_name = match symbol.as_str() {
+                    "ε" => "$",
+                    s => s,
+                };
+
+                definition.push_str(&format!(
+                    "{}:{}>{}\n",
+                    state_name,
+                    symbol_name,
+                    next_states
+                        .states()
+                        .map(|next_state| state_names.get(&next_state).cloned().unwrap())
+                        .collect::<Vec<_>>()
+                        .join(",")
+                ));
+            }
+        }
+
+        definition
+    }
 }
 
 impl FiniteAutomatonSymbol for Symbol {
@@ -160,7 +279,7 @@ impl FiniteAutomatonSymbol for Symbol {
     }
 }
 
-#[derive(Debug, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum EpsilonNfaSymbol {
     Epsilon,
     Symbol(Symbol),
@@ -199,6 +318,56 @@ pub type Nfa = FiniteAutomaton<Symbol, IndexSet<StateId>>;
 pub type Dfa = FiniteAutomaton<Symbol, StateId>;
 
 impl EpsilonNfa {
+    pub fn from_definition(
+        start_state: &str,
+        final_states: &[&str],
+        transitions: &[(&str, &str, &[&str])],
+    ) -> EpsilonNfa {
+        let mut state_map = IndexMap::new();
+
+        let mut epsilon_nfa =
+            EpsilonNfa::new_with_start_state(State::new(Some(start_state.to_string())));
+        state_map.insert(start_state.to_string(), epsilon_nfa.start_state);
+
+        for final_state in final_states {
+            let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
+                let state = State::new(Some(final_state.to_string()));
+                let id = state.id;
+                epsilon_nfa.states.insert(id, state);
+                id
+            });
+
+            epsilon_nfa.make_final(*state);
+        }
+
+        for (from, symbol, to) in transitions.iter().copied() {
+            let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
+                let state = State::new(Some(from.to_string()));
+                let id = state.id;
+                epsilon_nfa.states.insert(id, state);
+                id
+            });
+
+            let symbol = match symbol {
+                "ε" => EpsilonNfaSymbol::Epsilon,
+                s => EpsilonNfaSymbol::Symbol(Symbol::new(s.to_string())),
+            };
+
+            for to_state in to.iter().copied() {
+                let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
+                    let state = State::new(Some(to_state.to_string()));
+                    let id = state.id;
+                    epsilon_nfa.states.insert(id, state);
+                    id
+                });
+
+                epsilon_nfa.link(from_state, symbol.clone(), to_state);
+            }
+        }
+
+        epsilon_nfa
+    }
+
     fn link(&mut self, from: StateId, symbol: EpsilonNfaSymbol, to: StateId) {
         self.transitions
             .entry(from)
@@ -206,6 +375,37 @@ impl EpsilonNfa {
             .entry(symbol)
             .or_insert_with(IndexSet::new)
             .insert(to);
+    }
+
+    fn merge_states(&mut self, dest: StateId, src: StateId) {
+        if self.start_state == src {
+            self.start_state = dest;
+        }
+
+        if self.final_states.shift_remove(&src) {
+            self.final_states.insert(dest);
+        }
+
+        for state_transitions in self.transitions.values_mut() {
+            for next_states in state_transitions.values_mut() {
+                if next_states.shift_remove(&src) {
+                    next_states.insert(dest);
+                }
+            }
+        }
+
+        if let Some(src_transitions) = self.transitions.shift_remove(&src) {
+            for (src_symbol, src_next_states) in src_transitions {
+                let dest_transitions = self.transitions.entry(dest).or_insert_with(IndexMap::new);
+
+                dest_transitions
+                    .entry(src_symbol)
+                    .or_insert_with(IndexSet::new)
+                    .extend(src_next_states);
+            }
+        }
+
+        self.states.shift_remove(&src);
     }
 
     fn epsilon_closure(
@@ -234,6 +434,52 @@ impl EpsilonNfa {
 }
 
 impl Nfa {
+    pub fn from_definition(
+        start_state: &str,
+        final_states: &[&str],
+        transitions: &[(&str, &str, &[&str])],
+    ) -> Nfa {
+        let mut state_map = IndexMap::new();
+
+        let mut nfa = Nfa::new_with_start_state(State::new(Some(start_state.to_string())));
+        state_map.insert(start_state.to_string(), nfa.start_state);
+
+        for final_state in final_states {
+            let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
+                let state = State::new(Some(final_state.to_string()));
+                let id = state.id;
+                nfa.states.insert(id, state);
+                id
+            });
+
+            nfa.make_final(*state);
+        }
+
+        for (from, symbol, to) in transitions.iter().copied() {
+            let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
+                let state = State::new(Some(from.to_string()));
+                let id = state.id;
+                nfa.states.insert(id, state);
+                id
+            });
+
+            let symbol = Symbol::new(symbol.to_string());
+
+            for to_state in to.iter().copied() {
+                let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
+                    let state = State::new(Some(to_state.to_string()));
+                    let id = state.id;
+                    nfa.states.insert(id, state);
+                    id
+                });
+
+                nfa.link(from_state, symbol.clone(), to_state);
+            }
+        }
+
+        nfa
+    }
+
     fn link(&mut self, from: StateId, symbol: Symbol, to: StateId) {
         self.transitions
             .entry(from)
@@ -297,6 +543,60 @@ impl Nfa {
     }
 }
 
+impl Dfa {
+    pub fn from_definition(
+        start_state: &str,
+        final_states: &[&str],
+        transitions: &[(&str, &str, &str)],
+    ) -> Dfa {
+        let mut state_map = IndexMap::new();
+
+        let mut dfa = Dfa::new_with_start_state(State::new(Some(start_state.to_string())));
+        state_map.insert(start_state.to_string(), dfa.start_state);
+
+        for final_state in final_states {
+            let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
+                let state = State::new(Some(final_state.to_string()));
+                let id = state.id;
+                dfa.states.insert(id, state);
+                id
+            });
+
+            dfa.make_final(*state);
+        }
+
+        for (from, symbol, to) in transitions.iter().copied() {
+            let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
+                let state = State::new(Some(from.to_string()));
+                let id = state.id;
+                dfa.states.insert(id, state);
+                id
+            });
+
+            let symbol = Symbol::new(symbol.to_string());
+
+            let to_state = *state_map.entry(to.to_string()).or_insert_with(|| {
+                let state = State::new(Some(to.to_string()));
+                let id = state.id;
+                dfa.states.insert(id, state);
+                id
+            });
+
+            dfa.link(from_state, symbol.clone(), to_state);
+        }
+
+        dfa
+    }
+
+    fn link(&mut self, from: StateId, symbol: Symbol, to: StateId) {
+        self.transitions
+            .entry(from)
+            .or_insert_with(IndexMap::new)
+            .entry(symbol)
+            .insert_entry(to);
+    }
+}
+
 impl From<RegularExpression> for EpsilonNfa {
     fn from(regex: RegularExpression) -> Self {
         match regex {
@@ -314,8 +614,7 @@ impl From<RegularExpression> for EpsilonNfa {
 
                 first_nfa.make_final(second_final);
 
-                // TODO: Merge these 2 states.
-                first_nfa.link(first_final, EpsilonNfaSymbol::Epsilon, second_start);
+                first_nfa.merge_states(first_final, second_start);
 
                 first_nfa
             }
@@ -420,5 +719,56 @@ impl From<EpsilonNfa> for Nfa {
         }
 
         nfa
+    }
+}
+
+impl From<Nfa> for Dfa {
+    fn from(nfa: Nfa) -> Self {
+        let start_state_set = BTreeSet::from([nfa.start_state]);
+
+        let mut dfa = Dfa::new();
+
+        let mut state_map = IndexMap::from([(start_state_set.clone(), dfa.start_state)]);
+
+        let mut queue = VecDeque::from([start_state_set]);
+
+        let symbols = nfa
+            .transitions
+            .values()
+            .flat_map(|map| map.keys())
+            .collect::<IndexSet<_>>();
+
+        while let Some(current_set) = queue.pop_front() {
+            let dfa_state = state_map.get(&current_set).cloned().unwrap();
+            for state in &current_set {
+                if nfa.final_states.contains(state) {
+                    dfa.make_final(dfa_state);
+                }
+            }
+
+            for symbol in symbols.iter().copied() {
+                let mut next_set = BTreeSet::new();
+
+                for state in current_set.iter() {
+                    if let Some(transitions) = nfa.transitions.get(state) {
+                        if let Some(next_states) = transitions.get(symbol) {
+                            next_set.extend(next_states.states());
+                        }
+                    }
+                }
+
+                let next_state = state_map
+                    .entry(next_set.clone())
+                    .or_insert_with(|| {
+                        queue.push_back(next_set.clone());
+                        dfa.new_state()
+                    })
+                    .clone();
+
+                dfa.link(dfa_state, symbol.clone(), next_state);
+            }
+        }
+
+        dfa
     }
 }

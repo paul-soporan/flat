@@ -6,3 +6,4 @@ edition = "2021"
 [dependencies]
 indexmap = "2.9.0"
 uuid = { version = "1.16.0", features = ["v4"] }
+winnow = "0.7.6"

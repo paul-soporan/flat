@@ -1,16 +1,12 @@
-use std::fmt::Display;
+use derive_more::Display;
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+#[derive(Debug, Display, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Symbol(String);
 
-impl Display for Symbol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}", self.0)
-    }
-}
-
 impl Symbol {
-    pub fn new(s: String) -> Self {
+    pub fn new(s: impl Into<String>) -> Self {
+        let s = s.into();
+
         assert!(!s.is_empty());
         Symbol(s)
     }
@@ -23,5 +19,3 @@ impl Symbol {
         self.0.clone()
     }
 }
-
-pub type Word = Vec<Symbol>;

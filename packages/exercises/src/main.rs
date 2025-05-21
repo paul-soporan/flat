@@ -1,5 +1,6 @@
 use flat::{
     automata::{Dfa, EpsilonNfa, Nfa},
+    grammar::{ContextFreeGrammar, Grammar},
     regex::RegularExpression,
 };
 
@@ -65,7 +66,24 @@ fn regex_to_dfa() {
     }
 }
 
+fn grammars() {
+    // let cfg = ContextFreeGrammar::from_productions(
+    //     "S",
+    //     &["S → Aa | B | c", "A → a | Bca | B", "B → ε | A | bb"],
+    // );
+
+    let cfg =
+        ContextFreeGrammar::from_productions("S", &["S → XA | BB", "B → b | SB", "X → b", "A → a"]);
+
+    let cnf = cfg.to_chomsky_normal_form();
+    println!("Chomsky Normal Form:\n{}", cnf.definition());
+
+    let gnf = cnf.to_greibach_normal_form();
+    println!("Greibach Normal Form:\n{}", gnf.definition());
+}
+
 fn main() {
-    regex_to_dfa();
+    // regex_to_dfa();
     // nfa_to_regex();
+    grammars();
 }

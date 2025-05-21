@@ -3,7 +3,7 @@ use std::fmt::Display;
 use indexmap::{IndexMap, IndexSet};
 use winnow::{
     ascii::space0,
-    combinator::{alt, delimited, eof, repeat, separated_foldl1, separated_foldr1, terminated},
+    combinator::{alt, delimited, eof, repeat, separated_foldr1, terminated},
     error::ContextError,
     token::one_of,
     Parser, Result, Stateful,

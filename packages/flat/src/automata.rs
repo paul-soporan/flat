@@ -39,7 +39,6 @@ pub trait TransitionResult {
 #[derive(Debug)]
 pub struct FiniteAutomaton<S: FiniteAutomatonSymbol, T: TransitionResult> {
     pub states: IndexMap<StateId, State>,
-    // pub alphabet: Vec<Symbol>,
     pub transitions: IndexMap<StateId, IndexMap<S, T>>,
     pub start_state: StateId,
     pub final_states: IndexSet<StateId>,
@@ -303,6 +302,7 @@ impl TransitionResult for IndexSet<StateId> {
         format!("{{{}}}", self.iter().map(f).collect::<Vec<_>>().join(", "))
     }
 }
+
 impl TransitionResult for StateId {
     fn states(&self) -> impl Iterator<Item = StateId> {
         std::iter::once(*self)

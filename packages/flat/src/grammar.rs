@@ -3,6 +3,7 @@ use std::fmt::Display;
 use derive_more::Display;
 use indexmap::{indexset, IndexMap, IndexSet};
 use itertools::Itertools;
+use tabled::{builder::Builder, settings::Style};
 
 use crate::language::Symbol;
 
@@ -499,6 +500,97 @@ pub struct ChomskyNormalFormGrammar {
     productions: IndexMap<NonTerminal, IndexSet<CnfWord>>,
 }
 
+#[derive(Debug)]
+pub struct CykTable {
+    table: Vec<Vec<IndexSet<NonTerminal>>>,
+    word: String,
+    start_symbol: NonTerminal,
+}
+
+impl CykTable {
+    pub fn new(size: usize, word: impl Into<String>, start_symbol: &NonTerminal) -> Self {
+        CykTable {
+            table: vec![vec![IndexSet::new(); size]; size],
+            word: word.into(),
+            start_symbol: start_symbol.clone(),
+        }
+    }
+
+    pub fn contains(&self, i: usize, j: usize, value: &NonTerminal) -> bool {
+        self.table[i][j].contains(value)
+    }
+
+    pub fn get(&self, i: usize, j: usize) -> &IndexSet<NonTerminal> {
+        &self.table[i][j]
+    }
+
+    pub fn insert(&mut self, i: usize, j: usize, value: NonTerminal) {
+        self.table[i][j].insert(value);
+    }
+
+    pub fn is_word_in_language(&self) -> bool {
+        self.table[0][self.table.len() - 1].contains(&self.start_symbol)
+    }
+}
+
+impl Display for CykTable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "CYK Table for word \"{}\":\n", self.word)?;
+
+        let mut builder = Builder::default();
+
+        for (i, row) in self.table.iter().enumerate() {
+            builder.push_record(row.iter().enumerate().map(|(j, s)| {
+                if j >= i {
+                    format!(
+                        "V_{},{} = {}",
+                        i + 1,
+                        j + 1,
+                        if s.is_empty() {
+                            "∅".to_string()
+                        } else {
+                            format!("{{{}}}", s.iter().map(ToString::to_string).join(", "))
+                        }
+                    )
+                } else {
+                    String::new()
+                }
+            }));
+        }
+
+        builder.insert_record(0, (1..=self.table.len()).map(|j| format!("j = {}", j)));
+        builder.insert_column(
+            0,
+            std::iter::once(String::new())
+                .chain((1..=self.table.len()).map(|i| format!("i = {}", i))),
+        );
+
+        let mut table = builder.build();
+        table.with(Style::rounded());
+
+        writeln!(f, "{}", table)?;
+
+        writeln!(
+            f,
+            "The word \"{}\" is {} in the language defined by the grammar, as the start symbol {} {} in the top-right cell.",
+            self.word,
+            if self.is_word_in_language() {
+                "accepted"
+            } else {
+                "not accepted"
+            },
+            self.start_symbol,
+            if self.is_word_in_language() {
+                "is"
+            } else {
+                "is not"
+            }
+        )?;
+
+        Ok(())
+    }
+}
+
 impl ChomskyNormalFormGrammar {
     pub fn to_context_free_grammar(&self) -> ContextFreeGrammar {
         let mut grammar = ContextFreeGrammar {
@@ -757,6 +849,48 @@ impl ChomskyNormalFormGrammar {
         }
 
         gnf
+    }
+
+    pub fn cyk(&self, word: &str) -> CykTable {
+        let terminals = word
+            .chars()
+            .map(|c| Terminal(Symbol::new(c)))
+            .collect::<Vec<_>>();
+
+        let n = terminals.len();
+        let mut table = CykTable::new(n, word, &self.start_symbol);
+
+        for (lhs, rhs) in &self.productions {
+            for word in rhs {
+                if let CnfWord::Terminal(t) = word {
+                    for (i, terminal) in terminals.iter().enumerate() {
+                        if terminal == t {
+                            table.insert(i, i, lhs.clone());
+                        }
+                    }
+                }
+            }
+        }
+
+        for d in 0..n - 1 {
+            for i in 0..n - d - 1 {
+                let j = i + d + 1;
+
+                for k in i..j {
+                    for (lhs, rhs) in &self.productions {
+                        for word in rhs {
+                            if let CnfWord::NonTerminals(nt1, nt2) = word {
+                                if table.contains(i, k, nt1) && table.contains(k + 1, j, nt2) {
+                                    table.insert(i, j, lhs.clone());
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        table
     }
 }
 

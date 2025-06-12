@@ -6,14 +6,10 @@ use std::{
 use indexmap::{indexmap, IndexMap, IndexSet};
 
 use crate::{
-    automata::types::{State, StateId},
+    automata::types::{AutomatonSymbol, State, StateId},
     language::Symbol,
     regex::RegularExpression,
 };
-
-pub trait FiniteAutomatonSymbol: Hash + Eq {
-    fn as_str(&self) -> &str;
-}
 
 pub trait TransitionResult {
     fn states(&self) -> impl Iterator<Item = StateId>;
@@ -22,29 +18,32 @@ pub trait TransitionResult {
 }
 
 #[derive(Debug)]
-pub struct FiniteAutomaton<S: FiniteAutomatonSymbol, T: TransitionResult> {
+pub struct FiniteAutomaton<S: AutomatonSymbol, T: TransitionResult> {
     pub states: IndexMap<StateId, State>,
     pub transitions: IndexMap<StateId, IndexMap<S, T>>,
     pub start_state: StateId,
     pub final_states: IndexSet<StateId>,
 }
 
-impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
+impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
     fn new() -> Self {
         let start_state = State::new(None);
+        let start_state_id = start_state.id();
 
         FiniteAutomaton {
-            start_state: start_state.id,
-            states: indexmap! { start_state.id => start_state },
+            start_state: start_state_id,
+            states: indexmap! { start_state_id => start_state },
             transitions: IndexMap::new(),
             final_states: IndexSet::new(),
         }
     }
 
     fn new_with_start_state(start_state: State) -> Self {
+        let start_state_id = start_state.id();
+
         FiniteAutomaton {
-            start_state: start_state.id,
-            states: indexmap! { start_state.id => start_state },
+            start_state: start_state_id,
+            states: indexmap! { start_state_id => start_state },
             transitions: IndexMap::new(),
             final_states: IndexSet::new(),
         }
@@ -52,7 +51,7 @@ impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
 
     fn new_state(&mut self) -> StateId {
         let state = State::new(None);
-        let id = state.id;
+        let id = state.id();
 
         self.states.insert(id, state);
 
@@ -92,7 +91,7 @@ impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
         let mut state_names = self
             .states
             .values()
-            .filter_map(|s| s.name.clone().map(|name| (s.id, name)))
+            .filter_map(|s| s.name().map(|name| (s.id(), name.to_owned())))
             .collect::<IndexMap<_, _>>();
 
         let mut state_idx = 1;
@@ -171,7 +170,7 @@ impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
         let mut state_names = self
             .states
             .values()
-            .filter_map(|s| s.name.clone().map(|name| (s.id, name)))
+            .filter_map(|s| s.name().map(|name| (s.id(), name.to_owned())))
             .collect::<IndexMap<_, _>>();
 
         let mut state_idx = 1;
@@ -257,7 +256,7 @@ impl<S: FiniteAutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
     }
 }
 
-impl FiniteAutomatonSymbol for Symbol {
+impl AutomatonSymbol for Symbol {
     fn as_str(&self) -> &str {
         self.as_str()
     }
@@ -269,7 +268,7 @@ pub enum EpsilonNfaSymbol {
     Symbol(Symbol),
 }
 
-impl FiniteAutomatonSymbol for EpsilonNfaSymbol {
+impl AutomatonSymbol for EpsilonNfaSymbol {
     fn as_str(&self) -> &str {
         match self {
             EpsilonNfaSymbol::Epsilon => "ε",
@@ -317,7 +316,7 @@ impl EpsilonNfa {
         for final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
                 let state = State::new(Some(final_state.to_string()));
-                let id = state.id;
+                let id = state.id();
                 epsilon_nfa.states.insert(id, state);
                 id
             });
@@ -328,7 +327,7 @@ impl EpsilonNfa {
         for (from, symbol, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
                 let state = State::new(Some(from.to_string()));
-                let id = state.id;
+                let id = state.id();
                 epsilon_nfa.states.insert(id, state);
                 id
             });
@@ -341,7 +340,7 @@ impl EpsilonNfa {
             for to_state in to.iter().copied() {
                 let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
                     let state = State::new(Some(to_state.to_string()));
-                    let id = state.id;
+                    let id = state.id();
                     epsilon_nfa.states.insert(id, state);
                     id
                 });
@@ -432,7 +431,7 @@ impl Nfa {
         for final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
                 let state = State::new(Some(final_state.to_string()));
-                let id = state.id;
+                let id = state.id();
                 nfa.states.insert(id, state);
                 id
             });
@@ -443,7 +442,7 @@ impl Nfa {
         for (from, symbol, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
                 let state = State::new(Some(from.to_string()));
-                let id = state.id;
+                let id = state.id();
                 nfa.states.insert(id, state);
                 id
             });
@@ -453,7 +452,7 @@ impl Nfa {
             for to_state in to.iter().copied() {
                 let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
                     let state = State::new(Some(to_state.to_string()));
-                    let id = state.id;
+                    let id = state.id();
                     nfa.states.insert(id, state);
                     id
                 });
@@ -542,7 +541,7 @@ impl Dfa {
         for final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
                 let state = State::new(Some(final_state.to_string()));
-                let id = state.id;
+                let id = state.id();
                 dfa.states.insert(id, state);
                 id
             });
@@ -553,7 +552,7 @@ impl Dfa {
         for (from, symbol, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
                 let state = State::new(Some(from.to_string()));
-                let id = state.id;
+                let id = state.id();
                 dfa.states.insert(id, state);
                 id
             });
@@ -562,7 +561,7 @@ impl Dfa {
 
             let to_state = *state_map.entry(to.to_string()).or_insert_with(|| {
                 let state = State::new(Some(to.to_string()));
-                let id = state.id;
+                let id = state.id();
                 dfa.states.insert(id, state);
                 id
             });

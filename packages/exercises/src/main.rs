@@ -1,9 +1,15 @@
 use flat::{
-    automata::finite_state::{Dfa, EpsilonNfa, Nfa},
-    grammars::{
-        chomsky_normal_form::ChomskyNormalFormGrammar, context_free::ContextFreeGrammar,
-        greibach_normal_form::GreibachNormalFormGrammar, types::Grammar,
+    automata::{
+        finite_state::{Dfa, EpsilonNfa, Nfa},
+        turing_machine::TuringMachine,
     },
+    grammars::{
+        chomsky_normal_form::ChomskyNormalFormGrammar,
+        context_free::ContextFreeGrammar,
+        greibach_normal_form::GreibachNormalFormGrammar,
+        types::{Grammar, Word},
+    },
+    language::Symbol,
     regex::RegularExpression,
 };
 
@@ -106,9 +112,40 @@ fn cyk() {
     // println!("{}", table);
 }
 
+fn turing_machine() {
+    let tm = TuringMachine::from_definition(
+        "q0",
+        &["q4"],
+        &[
+            ("q0", "0", "X", 1, "q1"),
+            ("q0", "Y", "Y", 1, "q3"),
+            ("q1", "0", "0", 1, "q1"),
+            ("q1", "Y", "Y", 1, "q1"),
+            ("q1", "1", "Y", -1, "q2"),
+            ("q2", "0", "0", -1, "q2"),
+            ("q2", "Y", "Y", -1, "q2"),
+            ("q2", "X", "X", 1, "q0"),
+            ("q3", "Y", "Y", 1, "q3"),
+            ("q3", "B", "B", 1, "q4"),
+        ],
+    );
+
+    let input = Word(vec![
+        Symbol::new("0".to_string()),
+        Symbol::new("0".to_string()),
+        Symbol::new("1".to_string()),
+        Symbol::new("1".to_string()),
+    ]);
+
+    let is_accepted = tm.run(&input);
+    println!("Input: {}", input);
+    println!("Accepted: {}", is_accepted);
+}
+
 fn main() {
     // regex_to_dfa();
     // nfa_to_regex();
-    grammars();
+    // grammars();
     // cyk();
+    turing_machine();
 }

@@ -1,4 +1,4 @@
-use std::fmt::Display;
+use std::{fmt::Display, str::FromStr};
 
 use indexmap::{IndexMap, IndexSet};
 use winnow::{
@@ -9,7 +9,7 @@ use winnow::{
     Parser, Result, Stateful,
 };
 
-use crate::{automata::Dfa, language::Symbol};
+use crate::{automata::finite_state::Dfa, language::Symbol};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum RegularExpression {
@@ -395,11 +395,11 @@ impl Display for RegularExpression {
     }
 }
 
-impl TryFrom<&str> for RegularExpression {
-    type Error = String;
+impl FromStr for RegularExpression {
+    type Err = String;
 
-    fn try_from(value: &str) -> Result<Self, Self::Error> {
-        parse_regular_expression(value)
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        parse_regular_expression(s)
     }
 }
 

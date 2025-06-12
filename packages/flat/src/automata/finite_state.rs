@@ -4,27 +4,12 @@ use std::{
 };
 
 use indexmap::{indexmap, IndexMap, IndexSet};
-use uuid::Uuid;
 
-use crate::{language::Symbol, regex::RegularExpression};
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct StateId(Uuid);
-
-#[derive(Debug, Clone)]
-pub struct State {
-    id: StateId,
-    name: Option<String>,
-}
-
-impl State {
-    pub fn new(name: Option<String>) -> Self {
-        State {
-            id: StateId(Uuid::new_v4()),
-            name,
-        }
-    }
-}
+use crate::{
+    automata::types::{State, StateId},
+    language::Symbol,
+    regex::RegularExpression,
+};
 
 pub trait FiniteAutomatonSymbol: Hash + Eq {
     fn as_str(&self) -> &str;

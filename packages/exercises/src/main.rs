@@ -1,6 +1,9 @@
 use flat::{
-    automata::{Dfa, EpsilonNfa, Nfa},
-    grammar::{ContextFreeGrammar, Grammar},
+    automata::finite_state::{Dfa, EpsilonNfa, Nfa},
+    grammars::{
+        chomsky_normal_form::ChomskyNormalFormGrammar, context_free::ContextFreeGrammar,
+        greibach_normal_form::GreibachNormalFormGrammar, types::Grammar,
+    },
     regex::RegularExpression,
 };
 
@@ -35,7 +38,7 @@ fn nfa_to_regex() {
 }
 
 fn regex_to_dfa() {
-    let r = RegularExpression::try_from("(a^*b)^* + (a + b)^*").unwrap();
+    let r = "(a^*b)^* + (a + b)^*".parse::<RegularExpression>().unwrap();
     // let r = RegularExpression::try_from("(a + bc^*)^*").unwrap();
 
     println!("Regular Expression:\n{}", r.to_string());
@@ -76,36 +79,36 @@ fn grammars() {
     let cfg =
         ContextFreeGrammar::from_productions("S", &["S → XA | BB", "B → b | SB", "X → b", "A → a"]);
 
-    let cnf = cfg.to_chomsky_normal_form();
+    let cnf = ChomskyNormalFormGrammar::from_context_free_grammar(&cfg);
     println!("Chomsky Normal Form:\n{}", cnf.definition());
 
-    let gnf = cnf.to_greibach_normal_form();
+    let gnf = GreibachNormalFormGrammar::from_chomsky_normal_form(&cnf);
     println!("Greibach Normal Form:\n{}", gnf.definition());
 }
 
 fn cyk() {
-    let cfg = ContextFreeGrammar::from_productions(
-        "S",
-        &[
-            "S → TT | AC",
-            "T → AC | DA | AB | BA",
-            "C → XB",
-            "D → BX",
-            "X → TT | AB | BA",
-            "A → a",
-            "B → b",
-        ],
-    );
+    // let cfg = ContextFreeGrammar::from_productions(
+    //     "S",
+    //     &[
+    //         "S → TT | AC",
+    //         "T → AC | DA | AB | BA",
+    //         "C → XB",
+    //         "D → BX",
+    //         "X → TT | AB | BA",
+    //         "A → a",
+    //         "B → b",
+    //     ],
+    // );
 
-    let cnf = cfg.to_chomsky_normal_form();
+    // let cnf = cfg.to_chomsky_normal_form();
 
-    let table = cnf.cyk("baabab");
-    println!("{}", table);
+    // let table = cnf.cyk("baabab");
+    // println!("{}", table);
 }
 
 fn main() {
     // regex_to_dfa();
     // nfa_to_regex();
-    // grammars();
-    cyk();
+    grammars();
+    // cyk();
 }

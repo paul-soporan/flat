@@ -3,9 +3,7 @@ use std::{borrow::Cow, fmt::Display, hash::Hash};
 use derive_more::Display;
 use indexmap::{IndexMap, IndexSet};
 
-use crate::language::Symbol;
-
-const EPSILON: &str = "ε";
+use crate::language::{Symbol, Word, EPSILON};
 
 #[derive(Debug, Display, Clone, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct Terminal(pub Symbol);
@@ -17,19 +15,6 @@ pub struct NonTerminal(pub Symbol);
 pub enum ProductionSymbol {
     Terminal(Terminal),
     NonTerminal(NonTerminal),
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct Word<S: Display>(pub Vec<S>);
-
-impl<S: Display> Display for Word<S> {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(
-            f,
-            "{}",
-            self.0.iter().map(ToString::to_string).collect::<String>()
-        )
-    }
 }
 
 pub trait ProductionWord: Display + Clone + TryFrom<Word<ProductionSymbol>> {

@@ -6,27 +6,14 @@ use itertools::Itertools;
 
 use crate::{
     automata::types::{State, StateId},
-    grammars::types::Word,
-    language::Symbol,
+    language::{Symbol, SymbolOrEpsilon, Word, EPSILON},
 };
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-enum TapeSymbol {
-    Epsilon,
-    Symbol(Symbol),
-}
-
-impl Display for TapeSymbol {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        match self {
-            TapeSymbol::Epsilon => write!(f, "ε"),
-            TapeSymbol::Symbol(symbol) => write!(f, "{}", symbol),
-        }
-    }
-}
+#[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
+struct TapeSymbol(SymbolOrEpsilon);
 
 #[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
-struct StackSymbol(TapeSymbol);
+struct StackSymbol(SymbolOrEpsilon);
 
 #[derive(Debug)]
 struct InstantaneousDescription<'a> {
@@ -71,8 +58,8 @@ impl<'a> InstantaneousDescription<'a> {
 
         for symbol in pushed_stack_symbols.iter().rev() {
             match symbol {
-                StackSymbol(TapeSymbol::Epsilon) => continue,
-                StackSymbol(TapeSymbol::Symbol(s)) => self.stack.push(s.clone()),
+                StackSymbol(SymbolOrEpsilon::Epsilon) => continue,
+                StackSymbol(SymbolOrEpsilon::Symbol(s)) => self.stack.push(s.clone()),
             }
         }
     }
@@ -102,15 +89,15 @@ impl<'a> InstantaneousDescription<'a> {
         let tape_transitions = current_tape_symbol
             .map(|current_tape_symbol| {
                 state_transitions.get(&(
-                    TapeSymbol::Symbol(current_tape_symbol),
-                    StackSymbol(TapeSymbol::Symbol(current_stack_symbol.clone())),
+                    TapeSymbol(SymbolOrEpsilon::Symbol(current_tape_symbol)),
+                    StackSymbol(SymbolOrEpsilon::Symbol(current_stack_symbol.clone())),
                 ))
             })
             .flatten();
 
         let epsilon_transitions = state_transitions.get(&(
-            TapeSymbol::Epsilon,
-            StackSymbol(TapeSymbol::Symbol(current_stack_symbol)),
+            TapeSymbol(SymbolOrEpsilon::Epsilon),
+            StackSymbol(SymbolOrEpsilon::Symbol(current_stack_symbol)),
         ));
 
         let transitions = tape_transitions
@@ -169,12 +156,12 @@ impl Display for InstantaneousDescription<'_> {
             "({}, {}, {})",
             current_state.name().unwrap_or_else(|| "q?"),
             if self.tape[self.tape_index..].is_empty() {
-                "ε".to_string()
+                EPSILON.to_string()
             } else {
                 self.tape.iter().skip(self.tape_index).join("")
             },
             if self.stack.is_empty() {
-                "ε".to_string()
+                EPSILON.to_string()
             } else {
                 self.stack.iter().join("")
             }
@@ -193,11 +180,8 @@ pub struct PushdownAutomaton {
 }
 
 impl PushdownAutomaton {
-    pub fn new() -> Self {
-        Self::new_with_start_state(State::new(None), unimplemented!())
-    }
-
-    pub fn new_with_start_state(start_state: State, initial_stack_symbol: Symbol) -> Self {
+    pub fn new(start_state: Option<State>, initial_stack_symbol: Symbol) -> Self {
+        let start_state = start_state.unwrap_or_default();
         let start_state_id = start_state.id();
 
         Self {
@@ -217,15 +201,15 @@ impl PushdownAutomaton {
     ) -> Self {
         let mut state_map = IndexMap::new();
 
-        let mut pda = Self::new_with_start_state(
-            State::new(Some(start_state.to_string())),
+        let mut pda = Self::new(
+            Some(State::with_name(start_state)),
             Symbol::new(initial_stack_symbol),
         );
         state_map.insert(start_state.to_string(), pda.start_state);
 
-        for final_state in final_states {
+        for &final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
-                let state = State::new(Some(final_state.to_string()));
+                let state = State::with_name(final_state);
                 let id = state.id();
                 pda.states.insert(id, state);
                 id
@@ -236,25 +220,25 @@ impl PushdownAutomaton {
 
         for (from, tape_symbol, popped_stack_symbol, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
-                let state = State::new(Some(from.to_string()));
+                let state = State::with_name(from);
                 let id = state.id();
                 pda.states.insert(id, state);
                 id
             });
 
-            let tape_symbol = match tape_symbol {
-                "ε" => TapeSymbol::Epsilon,
-                s => TapeSymbol::Symbol(Symbol::new(s.to_string())),
-            };
+            let tape_symbol = TapeSymbol(match tape_symbol {
+                EPSILON => SymbolOrEpsilon::Epsilon,
+                s => SymbolOrEpsilon::Symbol(Symbol::new(s.to_string())),
+            });
 
-            let popped_stack_symbol = match popped_stack_symbol {
-                "ε" => StackSymbol(TapeSymbol::Epsilon),
-                s => StackSymbol(TapeSymbol::Symbol(Symbol::new(s))),
-            };
+            let popped_stack_symbol = StackSymbol(match popped_stack_symbol {
+                EPSILON => SymbolOrEpsilon::Epsilon,
+                s => SymbolOrEpsilon::Symbol(Symbol::new(s)),
+            });
 
             for (pushed_stack_symbols, to_state) in to.iter().copied() {
                 let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
-                    let state = State::new(Some(to_state.to_string()));
+                    let state = State::with_name(to_state);
                     let id = state.id();
                     pda.states.insert(id, state);
                     id
@@ -262,9 +246,11 @@ impl PushdownAutomaton {
 
                 let pushed_stack_symbols = pushed_stack_symbols
                     .iter()
-                    .map(|s| match *s {
-                        "ε" => StackSymbol(TapeSymbol::Epsilon),
-                        s => StackSymbol(TapeSymbol::Symbol(Symbol::new(s.to_string()))),
+                    .map(|s| {
+                        StackSymbol(match *s {
+                            EPSILON => SymbolOrEpsilon::Epsilon,
+                            s => SymbolOrEpsilon::Symbol(Symbol::new(s.to_string())),
+                        })
                     })
                     .collect();
 
@@ -302,7 +288,7 @@ impl PushdownAutomaton {
     }
 
     pub fn run(&self, input: &Word<Symbol>) -> bool {
-        let mut id = InstantaneousDescription::initial(self, input.0.iter().map(|s| s.clone()));
+        let mut id = InstantaneousDescription::initial(self, input.clone());
 
         id.run()
     }

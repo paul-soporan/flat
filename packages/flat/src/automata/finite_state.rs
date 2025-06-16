@@ -1,13 +1,10 @@
-use std::{
-    collections::{BTreeSet, VecDeque},
-    hash::Hash,
-};
+use std::collections::{BTreeSet, VecDeque};
 
 use indexmap::{indexmap, IndexMap, IndexSet};
 
 use crate::{
     automata::types::{AutomatonSymbol, State, StateId},
-    language::Symbol,
+    language::{Symbol, SymbolOrEpsilon, EPSILON},
     regex::RegularExpression,
 };
 
@@ -26,19 +23,8 @@ pub struct FiniteAutomaton<S: AutomatonSymbol, T: TransitionResult> {
 }
 
 impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
-    fn new() -> Self {
-        let start_state = State::new(None);
-        let start_state_id = start_state.id();
-
-        FiniteAutomaton {
-            start_state: start_state_id,
-            states: indexmap! { start_state_id => start_state },
-            transitions: IndexMap::new(),
-            final_states: IndexSet::new(),
-        }
-    }
-
-    fn new_with_start_state(start_state: State) -> Self {
+    fn new(start_state: Option<State>) -> Self {
+        let start_state = start_state.unwrap_or_default();
         let start_state_id = start_state.id();
 
         FiniteAutomaton {
@@ -50,7 +36,7 @@ impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
     }
 
     fn new_state(&mut self) -> StateId {
-        let state = State::new(None);
+        let state = State::new();
         let id = state.id();
 
         self.states.insert(id, state);
@@ -235,7 +221,7 @@ impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
             let state_name = state_names[state].clone();
             for (symbol, next_states) in state_transitions {
                 let symbol_name = match symbol.as_str() {
-                    "ε" => "$",
+                    EPSILON => "$",
                     s => s,
                 };
 
@@ -253,27 +239,6 @@ impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
         }
 
         definition
-    }
-}
-
-impl AutomatonSymbol for Symbol {
-    fn as_str(&self) -> &str {
-        self.as_str()
-    }
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub enum EpsilonNfaSymbol {
-    Epsilon,
-    Symbol(Symbol),
-}
-
-impl AutomatonSymbol for EpsilonNfaSymbol {
-    fn as_str(&self) -> &str {
-        match self {
-            EpsilonNfaSymbol::Epsilon => "ε",
-            EpsilonNfaSymbol::Symbol(s) => s.as_str(),
-        }
     }
 }
 
@@ -297,7 +262,7 @@ impl TransitionResult for StateId {
     }
 }
 
-pub type EpsilonNfa = FiniteAutomaton<EpsilonNfaSymbol, IndexSet<StateId>>;
+pub type EpsilonNfa = FiniteAutomaton<SymbolOrEpsilon, IndexSet<StateId>>;
 pub type Nfa = FiniteAutomaton<Symbol, IndexSet<StateId>>;
 pub type Dfa = FiniteAutomaton<Symbol, StateId>;
 
@@ -309,13 +274,12 @@ impl EpsilonNfa {
     ) -> EpsilonNfa {
         let mut state_map = IndexMap::new();
 
-        let mut epsilon_nfa =
-            EpsilonNfa::new_with_start_state(State::new(Some(start_state.to_string())));
+        let mut epsilon_nfa = EpsilonNfa::new(Some(State::with_name(start_state)));
         state_map.insert(start_state.to_string(), epsilon_nfa.start_state);
 
-        for final_state in final_states {
+        for &final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
-                let state = State::new(Some(final_state.to_string()));
+                let state = State::with_name(final_state);
                 let id = state.id();
                 epsilon_nfa.states.insert(id, state);
                 id
@@ -326,20 +290,20 @@ impl EpsilonNfa {
 
         for (from, symbol, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
-                let state = State::new(Some(from.to_string()));
+                let state = State::with_name(from);
                 let id = state.id();
                 epsilon_nfa.states.insert(id, state);
                 id
             });
 
             let symbol = match symbol {
-                "ε" => EpsilonNfaSymbol::Epsilon,
-                s => EpsilonNfaSymbol::Symbol(Symbol::new(s.to_string())),
+                EPSILON => SymbolOrEpsilon::Epsilon,
+                s => SymbolOrEpsilon::Symbol(Symbol::new(s.to_string())),
             };
 
             for to_state in to.iter().copied() {
                 let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
-                    let state = State::new(Some(to_state.to_string()));
+                    let state = State::with_name(to_state);
                     let id = state.id();
                     epsilon_nfa.states.insert(id, state);
                     id
@@ -352,7 +316,7 @@ impl EpsilonNfa {
         epsilon_nfa
     }
 
-    fn link(&mut self, from: StateId, symbol: EpsilonNfaSymbol, to: StateId) {
+    fn link(&mut self, from: StateId, symbol: SymbolOrEpsilon, to: StateId) {
         self.transitions
             .entry(from)
             .or_insert_with(IndexMap::new)
@@ -405,7 +369,7 @@ impl EpsilonNfa {
 
         if let Some(transitions) = self.transitions.get(state) {
             for (symbol, next_states) in transitions {
-                if *symbol == EpsilonNfaSymbol::Epsilon {
+                if *symbol == SymbolOrEpsilon::Epsilon {
                     for next_state in next_states {
                         self.epsilon_closure(next_state, visited);
                     }
@@ -425,12 +389,12 @@ impl Nfa {
     ) -> Nfa {
         let mut state_map = IndexMap::new();
 
-        let mut nfa = Nfa::new_with_start_state(State::new(Some(start_state.to_string())));
+        let mut nfa = Nfa::new(Some(State::with_name(start_state)));
         state_map.insert(start_state.to_string(), nfa.start_state);
 
-        for final_state in final_states {
+        for &final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
-                let state = State::new(Some(final_state.to_string()));
+                let state = State::with_name(final_state);
                 let id = state.id();
                 nfa.states.insert(id, state);
                 id
@@ -441,7 +405,7 @@ impl Nfa {
 
         for (from, symbol, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
-                let state = State::new(Some(from.to_string()));
+                let state = State::with_name(from);
                 let id = state.id();
                 nfa.states.insert(id, state);
                 id
@@ -451,7 +415,7 @@ impl Nfa {
 
             for to_state in to.iter().copied() {
                 let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
-                    let state = State::new(Some(to_state.to_string()));
+                    let state = State::with_name(to_state);
                     let id = state.id();
                     nfa.states.insert(id, state);
                     id
@@ -535,12 +499,12 @@ impl Dfa {
     ) -> Dfa {
         let mut state_map = IndexMap::new();
 
-        let mut dfa = Dfa::new_with_start_state(State::new(Some(start_state.to_string())));
+        let mut dfa = Dfa::new(Some(State::with_name(start_state)));
         state_map.insert(start_state.to_string(), dfa.start_state);
 
-        for final_state in final_states {
+        for &final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
-                let state = State::new(Some(final_state.to_string()));
+                let state = State::with_name(final_state);
                 let id = state.id();
                 dfa.states.insert(id, state);
                 id
@@ -551,7 +515,7 @@ impl Dfa {
 
         for (from, symbol, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
-                let state = State::new(Some(from.to_string()));
+                let state = State::with_name(from);
                 let id = state.id();
                 dfa.states.insert(id, state);
                 id
@@ -560,7 +524,7 @@ impl Dfa {
             let symbol = Symbol::new(symbol.to_string());
 
             let to_state = *state_map.entry(to.to_string()).or_insert_with(|| {
-                let state = State::new(Some(to.to_string()));
+                let state = State::with_name(to);
                 let id = state.id();
                 dfa.states.insert(id, state);
                 id
@@ -603,7 +567,7 @@ impl From<RegularExpression> for EpsilonNfa {
                 first_nfa
             }
             regex => {
-                let mut epsilon_nfa = EpsilonNfa::new();
+                let mut epsilon_nfa = EpsilonNfa::new(None);
 
                 let start_state = epsilon_nfa.start_state;
                 let final_state = epsilon_nfa.new_state();
@@ -612,10 +576,10 @@ impl From<RegularExpression> for EpsilonNfa {
                 match regex {
                     RegularExpression::Zero => {}
                     RegularExpression::One => {
-                        epsilon_nfa.link(start_state, EpsilonNfaSymbol::Epsilon, final_state);
+                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, final_state);
                     }
                     RegularExpression::Symbol(s) => {
-                        epsilon_nfa.link(start_state, EpsilonNfaSymbol::Symbol(s), final_state);
+                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Symbol(s), final_state);
                     }
                     RegularExpression::Union(r1, r2) => {
                         let first_nfa = EpsilonNfa::from(*r1);
@@ -630,11 +594,11 @@ impl From<RegularExpression> for EpsilonNfa {
 
                         epsilon_nfa.use_finite_automaton(second_nfa);
 
-                        epsilon_nfa.link(start_state, EpsilonNfaSymbol::Epsilon, first_start);
-                        epsilon_nfa.link(start_state, EpsilonNfaSymbol::Epsilon, second_start);
+                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, first_start);
+                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, second_start);
 
-                        epsilon_nfa.link(first_final, EpsilonNfaSymbol::Epsilon, final_state);
-                        epsilon_nfa.link(second_final, EpsilonNfaSymbol::Epsilon, final_state);
+                        epsilon_nfa.link(first_final, SymbolOrEpsilon::Epsilon, final_state);
+                        epsilon_nfa.link(second_final, SymbolOrEpsilon::Epsilon, final_state);
                     }
                     RegularExpression::KleeneStar(r) => {
                         let inner_nfa = EpsilonNfa::from(*r);
@@ -643,11 +607,11 @@ impl From<RegularExpression> for EpsilonNfa {
 
                         epsilon_nfa.use_finite_automaton(inner_nfa);
 
-                        epsilon_nfa.link(start_state, EpsilonNfaSymbol::Epsilon, inner_start);
-                        epsilon_nfa.link(inner_final, EpsilonNfaSymbol::Epsilon, final_state);
+                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, inner_start);
+                        epsilon_nfa.link(inner_final, SymbolOrEpsilon::Epsilon, final_state);
 
-                        epsilon_nfa.link(inner_final, EpsilonNfaSymbol::Epsilon, inner_start);
-                        epsilon_nfa.link(start_state, EpsilonNfaSymbol::Epsilon, final_state);
+                        epsilon_nfa.link(inner_final, SymbolOrEpsilon::Epsilon, inner_start);
+                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, final_state);
                     }
                     RegularExpression::Plus(r) => {
                         let inner_nfa = EpsilonNfa::from(*r);
@@ -656,10 +620,10 @@ impl From<RegularExpression> for EpsilonNfa {
 
                         epsilon_nfa.use_finite_automaton(inner_nfa);
 
-                        epsilon_nfa.link(start_state, EpsilonNfaSymbol::Epsilon, inner_start);
-                        epsilon_nfa.link(inner_final, EpsilonNfaSymbol::Epsilon, final_state);
+                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, inner_start);
+                        epsilon_nfa.link(inner_final, SymbolOrEpsilon::Epsilon, final_state);
 
-                        epsilon_nfa.link(inner_final, EpsilonNfaSymbol::Epsilon, inner_start);
+                        epsilon_nfa.link(inner_final, SymbolOrEpsilon::Epsilon, inner_start);
                     }
                     _ => unreachable!(),
                 }
@@ -672,8 +636,7 @@ impl From<RegularExpression> for EpsilonNfa {
 
 impl From<EpsilonNfa> for Nfa {
     fn from(epsilon_nfa: EpsilonNfa) -> Self {
-        let mut nfa =
-            Nfa::new_with_start_state(epsilon_nfa.states[&epsilon_nfa.start_state].clone());
+        let mut nfa = Nfa::new(Some(epsilon_nfa.states[&epsilon_nfa.start_state].clone()));
 
         nfa.states.extend(epsilon_nfa.states.clone());
 
@@ -688,12 +651,12 @@ impl From<EpsilonNfa> for Nfa {
                 if let Some(transitions) = transitions {
                     for (transition_symbol, next_states) in transitions {
                         match transition_symbol {
-                            EpsilonNfaSymbol::Symbol(symbol) => {
+                            SymbolOrEpsilon::Symbol(symbol) => {
                                 for next_state in next_states {
                                     nfa.link(state, symbol.clone(), *next_state);
                                 }
                             }
-                            EpsilonNfaSymbol::Epsilon => {
+                            SymbolOrEpsilon::Epsilon => {
                                 // Epsilon transitions are ignored
                             }
                         }
@@ -710,7 +673,7 @@ impl From<Nfa> for Dfa {
     fn from(nfa: Nfa) -> Self {
         let start_state_set = BTreeSet::from([nfa.start_state]);
 
-        let mut dfa = Dfa::new();
+        let mut dfa = Dfa::new(None);
 
         let mut state_map = IndexMap::from([(start_state_set.clone(), dfa.start_state)]);
 

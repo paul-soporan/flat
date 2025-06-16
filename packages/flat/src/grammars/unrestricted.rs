@@ -1,6 +1,9 @@
 use indexmap::{IndexMap, IndexSet};
 
-use crate::grammars::types::{NonTerminal, ProductionSymbol, Word};
+use crate::{
+    grammars::types::{NonTerminal, ProductionSymbol},
+    language::Word,
+};
 
 #[derive(Debug)]
 pub struct UnrestrictedGrammar {

@@ -6,9 +6,9 @@ use crate::{
     grammars::{
         chomsky_normal_form::{ChomskyNormalFormGrammar, CnfWord},
         context_free::ContextFreeGrammar,
-        types::{Grammar, NonTerminal, ProductionSymbol, ProductionWord, Terminal, Word},
+        types::{Grammar, NonTerminal, ProductionSymbol, ProductionWord, Terminal},
     },
-    language::Symbol,
+    language::{Symbol, Word},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -148,7 +148,7 @@ impl GreibachNormalFormGrammar {
                         non_terminals[lhs].clone(),
                         rhs.into_iter()
                             .map(|word| {
-                                Word(match word {
+                                Word::new(match word {
                                     CnfWord::Terminal(t) => {
                                         vec![ProductionSymbol::Terminal(t.clone())]
                                     }
@@ -227,7 +227,7 @@ impl GreibachNormalFormGrammar {
                                 let mut new_word = trail.clone();
                                 new_word.push(ProductionSymbol::NonTerminal(new_nt.clone()));
 
-                                vec![Word(trail), Word(new_word)]
+                                vec![Word::new(trail), Word::new(new_word)]
                             })
                             .collect(),
                     );
@@ -345,38 +345,4 @@ impl GreibachNormalFormGrammar {
 
         gnf
     }
-
-    // pub fn to_context_free_grammar(&self) -> ContextFreeGrammar {
-    //     let mut cfg = ContextFreeGrammar {
-    //         start_symbol: self.start_symbol.clone(),
-    //         erasing_productions: if self.is_start_symbol_erasable {
-    //             indexset! {self.start_symbol.clone()}
-    //         } else {
-    //             IndexSet::new()
-    //         },
-    //         productions: IndexMap::new(),
-    //     };
-
-    //     for (lhs, rhs) in &self.productions {
-    //         let entry = cfg
-    //             .productions
-    //             .entry(lhs.clone())
-    //             .or_insert_with(IndexSet::new);
-
-    //         for (terminal, non_terminals) in rhs {
-    //             entry.insert(Word(
-    //                 std::iter::once(ProductionSymbol::Terminal(terminal.clone()))
-    //                     .chain(
-    //                         non_terminals
-    //                             .iter()
-    //                             .cloned()
-    //                             .map(|nt| ProductionSymbol::NonTerminal(nt)),
-    //                     )
-    //                     .collect(),
-    //             ));
-    //         }
-    //     }
-
-    //     cfg
-    // }
 }

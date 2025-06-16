@@ -4,8 +4,7 @@ use indexmap::{indexmap, IndexMap, IndexSet};
 
 use crate::{
     automata::types::{State, StateId},
-    grammars::types::Word,
-    language::Symbol,
+    language::{Symbol, Word},
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -166,11 +165,8 @@ pub struct TuringMachine {
 }
 
 impl TuringMachine {
-    pub fn new() -> Self {
-        Self::new_with_start_state(State::new(None))
-    }
-
-    pub fn new_with_start_state(start_state: State) -> Self {
+    pub fn new(start_state: Option<State>) -> Self {
+        let start_state = start_state.unwrap_or_default();
         let start_state_id = start_state.id();
 
         Self {
@@ -206,12 +202,12 @@ impl TuringMachine {
     ) -> Self {
         let mut state_map = IndexMap::new();
 
-        let mut tm = Self::new_with_start_state(State::new(Some(start_state.to_string())));
+        let mut tm = Self::new(Some(State::with_name(start_state)));
         state_map.insert(start_state.to_string(), tm.start_state);
 
-        for final_state in final_states {
+        for &final_state in final_states {
             let state = state_map.entry(final_state.to_string()).or_insert_with(|| {
-                let state = State::new(Some(final_state.to_string()));
+                let state = State::with_name(final_state);
                 let id = state.id();
                 tm.states.insert(id, state);
                 id
@@ -230,7 +226,7 @@ impl TuringMachine {
 
         for (from, read_symbol, written_symbol, movement, to) in transitions.iter().copied() {
             let from_state = *state_map.entry(from.to_string()).or_insert_with(|| {
-                let state = State::new(Some(from.to_string()));
+                let state = State::with_name(from);
                 let id = state.id();
                 tm.states.insert(id, state);
                 id
@@ -245,7 +241,7 @@ impl TuringMachine {
             };
 
             let to_state = *state_map.entry(to.to_string()).or_insert_with(|| {
-                let state = State::new(Some(to.to_string()));
+                let state = State::with_name(to);
                 let id = state.id();
                 tm.states.insert(id, state);
                 id
@@ -260,7 +256,7 @@ impl TuringMachine {
     pub fn run(&self, input: &Word<Symbol>) -> bool {
         let mut id = InstantaneousDescription::initial(
             self,
-            input.0.iter().map(|s| TapeSymbol::Symbol(s.clone())),
+            input.clone().into_iter().map(|s| TapeSymbol::Symbol(s)),
         );
 
         loop {

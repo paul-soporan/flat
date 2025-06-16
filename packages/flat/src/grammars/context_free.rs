@@ -4,8 +4,8 @@ use indexmap::{indexset, IndexMap, IndexSet};
 use itertools::Itertools;
 
 use crate::{
-    grammars::types::{Grammar, NonTerminal, ProductionSymbol, Word},
-    language::Symbol,
+    grammars::types::{Grammar, NonTerminal, ProductionSymbol},
+    language::{Symbol, Word},
 };
 
 #[derive(Debug, Clone)]
@@ -121,7 +121,7 @@ impl ContextFreeGrammar {
                         if word.is_empty() {
                             None
                         } else {
-                            Some(Word(word))
+                            Some(Word::new(word))
                         }
                     });
 
@@ -139,7 +139,7 @@ impl ContextFreeGrammar {
             self.erasing_productions.insert(new_start_symbol.clone());
             self.productions.insert(
                 new_start_symbol.clone(),
-                indexset! {Word(vec![ProductionSymbol::NonTerminal(
+                indexset! {Word::new(vec![ProductionSymbol::NonTerminal(
                     self.start_symbol.clone(),
                 )])},
             );
@@ -251,23 +251,18 @@ impl ContextFreeGrammar {
                     if word.0.len() == 1 {
                         word.clone()
                     } else {
-                        Word(
-                            word.0
-                                .iter()
-                                .map(|symbol| match symbol {
-                                    ProductionSymbol::Terminal(t) => {
-                                        let nt = NonTerminal(Symbol::new(format!("X_{}", t)));
-                                        new_productions
-                                            .entry(nt.clone())
-                                            .or_insert_with(IndexSet::new)
-                                            .insert(Word(vec![symbol.clone()]));
+                        Word::new(word.0.iter().map(|symbol| match symbol {
+                            ProductionSymbol::Terminal(t) => {
+                                let nt = NonTerminal(Symbol::new(format!("X_{}", t)));
+                                new_productions
+                                    .entry(nt.clone())
+                                    .or_insert_with(IndexSet::new)
+                                    .insert(Word::new(vec![symbol.clone()]));
 
-                                        ProductionSymbol::NonTerminal(nt)
-                                    }
-                                    ProductionSymbol::NonTerminal(_) => symbol.clone(),
-                                })
-                                .collect(),
-                        )
+                                ProductionSymbol::NonTerminal(nt)
+                            }
+                            ProductionSymbol::NonTerminal(_) => symbol.clone(),
+                        }))
                     }
                 })
                 .collect::<IndexSet<_>>();

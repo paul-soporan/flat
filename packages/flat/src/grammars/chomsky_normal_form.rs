@@ -7,9 +7,9 @@ use tabled::{builder::Builder, settings::Style};
 use crate::{
     grammars::{
         context_free::ContextFreeGrammar,
-        types::{Grammar, NonTerminal, ProductionSymbol, ProductionWord, Terminal, Word},
+        types::{Grammar, NonTerminal, ProductionSymbol, ProductionWord, Terminal},
     },
-    language::Symbol,
+    language::{Symbol, Word},
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
@@ -57,8 +57,8 @@ impl TryFrom<Word<ProductionSymbol>> for CnfWord {
 impl ProductionWord for CnfWord {
     fn to_word(&self) -> Word<ProductionSymbol> {
         match self {
-            CnfWord::Terminal(t) => Word(vec![ProductionSymbol::Terminal(t.clone())]),
-            CnfWord::NonTerminals(nt1, nt2) => Word(vec![
+            CnfWord::Terminal(t) => Word::new(vec![ProductionSymbol::Terminal(t.clone())]),
+            CnfWord::NonTerminals(nt1, nt2) => Word::new(vec![
                 ProductionSymbol::NonTerminal(nt1.clone()),
                 ProductionSymbol::NonTerminal(nt2.clone()),
             ]),
@@ -217,43 +217,6 @@ impl Display for CykTable {
 }
 
 impl ChomskyNormalFormGrammar {
-    // pub fn to_context_free_grammar(&self) -> ContextFreeGrammar {
-    //     let mut grammar = ContextFreeGrammar {
-    //         start_symbol: self.start_symbol.clone(),
-    //         erasing_productions: IndexSet::new(),
-    //         productions: IndexMap::new(),
-    //     };
-
-    //     for (lhs, rhs) in &self.productions {
-    //         let entry = grammar
-    //             .productions
-    //             .entry(lhs.clone())
-    //             .or_insert_with(IndexSet::new);
-
-    //         for word in rhs {
-    //             match word {
-    //                 CnfWord::Terminal(t) => {
-    //                     entry.insert(Word(vec![ProductionSymbol::Terminal(t.clone())]));
-    //                 }
-    //                 CnfWord::NonTerminals(nt1, nt2) => {
-    //                     entry.insert(Word(vec![
-    //                         ProductionSymbol::NonTerminal(nt1.clone()),
-    //                         ProductionSymbol::NonTerminal(nt2.clone()),
-    //                     ]));
-    //                 }
-    //             }
-    //         }
-    //     }
-
-    //     if self.is_start_symbol_erasable {
-    //         grammar
-    //             .erasing_productions
-    //             .insert(self.start_symbol.clone());
-    //     }
-
-    //     grammar
-    // }
-
     pub fn from_context_free_grammar(cfg: &ContextFreeGrammar) -> Self {
         let mut cfg = cfg.clone();
         cfg.eliminate_erasing_productions();
@@ -290,7 +253,7 @@ impl ChomskyNormalFormGrammar {
                 let new_nt = NonTerminal(Symbol::new(format!("Y_{}", idx)));
                 *idx += 1;
 
-                let next_word = chomskify(Word(word.0[1..].to_vec()), new_productions, idx);
+                let next_word = chomskify(Word::new(word.0[1..].to_vec()), new_productions, idx);
 
                 new_productions
                     .entry(new_nt.clone())

@@ -5,12 +5,10 @@ use flat::{
         turing_machine::TuringMachine,
     },
     grammars::{
-        chomsky_normal_form::ChomskyNormalFormGrammar,
-        context_free::ContextFreeGrammar,
-        greibach_normal_form::GreibachNormalFormGrammar,
-        types::{Grammar, Word},
+        chomsky_normal_form::ChomskyNormalFormGrammar, context_free::ContextFreeGrammar,
+        greibach_normal_form::GreibachNormalFormGrammar, types::Grammar,
     },
-    language::Symbol,
+    language::{Symbol, Word},
     regex::RegularExpression,
 };
 

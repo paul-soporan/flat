@@ -3,10 +3,7 @@ use std::{collections::VecDeque, fmt::Display};
 use indexmap::{indexmap, IndexMap, IndexSet};
 
 use crate::{
-    automata::{
-        turing_machine,
-        types::{State, StateId},
-    },
+    automata::types::{State, StateId},
     grammars::types::Word,
     language::Symbol,
 };
@@ -113,6 +110,10 @@ impl<'a> InstantaneousDescription<'a> {
         }
     }
 
+    fn is_final(&self) -> bool {
+        self.turing_machine.final_states.contains(&self.state)
+    }
+
     fn make_move(&mut self) -> bool {
         let current_symbol = self.tape.read();
 
@@ -131,10 +132,6 @@ impl<'a> InstantaneousDescription<'a> {
         } else {
             false
         }
-    }
-
-    fn is_final(&self) -> bool {
-        self.turing_machine.final_states.contains(&self.state)
     }
 }
 

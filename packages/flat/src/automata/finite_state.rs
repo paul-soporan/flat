@@ -20,9 +20,9 @@ pub trait TransitionResult {
 #[derive(Debug)]
 pub struct FiniteAutomaton<S: AutomatonSymbol, T: TransitionResult> {
     pub states: IndexMap<StateId, State>,
-    pub transitions: IndexMap<StateId, IndexMap<S, T>>,
     pub start_state: StateId,
     pub final_states: IndexSet<StateId>,
+    pub transitions: IndexMap<StateId, IndexMap<S, T>>,
 }
 
 impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {

@@ -1,6 +1,7 @@
 use flat::{
     automata::{
         finite_state::{Dfa, EpsilonNfa, Nfa},
+        pushdown::PushdownAutomaton,
         turing_machine::TuringMachine,
     },
     grammars::{
@@ -135,9 +136,37 @@ fn turing_machine() {
         Symbol::new("0".to_string()),
         Symbol::new("1".to_string()),
         Symbol::new("1".to_string()),
+        Symbol::new("1".to_string()),
     ]);
 
     let is_accepted = tm.run(&input);
+    println!("Input: {}", input);
+    println!("Accepted: {}", is_accepted);
+}
+
+fn pda() {
+    let pda = PushdownAutomaton::from_definition(
+        "q0",
+        "⊥",
+        &["q2"],
+        &[
+            ("q0", "a", "⊥", &[(&["a", "⊥"], "q0")]),
+            ("q0", "a", "a", &[(&["a", "a"], "q0")]),
+            ("q0", "b", "a", &[(&["ε"], "q1")]),
+            ("q1", "b", "a", &[(&["ε"], "q1")]),
+            ("q1", "ε", "⊥", &[(&["ε"], "q2")]),
+        ],
+    );
+
+    let input = Word(vec![
+        Symbol::new("a".to_string()),
+        Symbol::new("a".to_string()),
+        Symbol::new("b".to_string()),
+        Symbol::new("b".to_string()),
+        // Symbol::new("b".to_string()),
+    ]);
+
+    let is_accepted = pda.run(&input);
     println!("Input: {}", input);
     println!("Accepted: {}", is_accepted);
 }
@@ -147,5 +176,6 @@ fn main() {
     // nfa_to_regex();
     // grammars();
     // cyk();
-    turing_machine();
+    // turing_machine();
+    pda();
 }

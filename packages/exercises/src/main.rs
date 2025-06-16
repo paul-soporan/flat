@@ -1,7 +1,7 @@
 use flat::{
     automata::{
         finite_state::{Dfa, EpsilonNfa, Nfa},
-        pushdown::PushdownAutomaton,
+        pushdown::{AcceptanceCondition, PushdownAutomaton},
         turing_machine::TuringMachine,
     },
     grammars::{
@@ -154,6 +154,7 @@ fn pda() {
             ("q1", "b", "a", &[(&["ε"], "q1")]),
             ("q1", "ε", "⊥", &[(&["ε"], "q2")]),
         ],
+        AcceptanceCondition::EmptyStack | AcceptanceCondition::FinalState,
     );
 
     let input = Word(vec![

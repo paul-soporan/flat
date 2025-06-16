@@ -1,8 +1,10 @@
 use std::fmt::Display;
 
 use derive_more::Display;
+use enumflags2::{bitflags, BitFlags};
 use indexmap::{indexmap, IndexMap, IndexSet};
 use itertools::Itertools;
+use std::mem;
 
 use crate::{
     automata::types::{State, StateId},
@@ -14,6 +16,14 @@ struct TapeSymbol(SymbolOrEpsilon);
 
 #[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
 struct StackSymbol(SymbolOrEpsilon);
+
+#[bitflags]
+#[repr(u8)]
+#[derive(Debug, Clone, Copy)]
+pub enum AcceptanceCondition {
+    EmptyStack = 0b01,
+    FinalState = 0b10,
+}
 
 #[derive(Debug)]
 struct InstantaneousDescription<'a> {
@@ -39,8 +49,23 @@ impl<'a> InstantaneousDescription<'a> {
     }
 
     fn is_accepting(&self) -> bool {
-        self.tape_index == self.tape.len()
-            && (self.stack.is_empty() || self.pushdown_automaton.final_states.contains(&self.state))
+        if self.tape_index != self.tape.len() {
+            return false;
+        }
+
+        let acceptance_condition = self.pushdown_automaton.acceptance_condition;
+
+        if acceptance_condition.contains(AcceptanceCondition::EmptyStack) && self.stack.is_empty() {
+            return true;
+        }
+
+        if acceptance_condition.contains(AcceptanceCondition::FinalState)
+            && self.pushdown_automaton.final_states.contains(&self.state)
+        {
+            return true;
+        }
+
+        false
     }
 
     fn use_transition(
@@ -177,15 +202,21 @@ pub struct PushdownAutomaton {
     initial_stack_symbol: Symbol,
     transitions:
         IndexMap<StateId, IndexMap<(TapeSymbol, StackSymbol), Vec<(StateId, Vec<StackSymbol>)>>>,
+    acceptance_condition: BitFlags<AcceptanceCondition>,
 }
 
 impl PushdownAutomaton {
-    pub fn new(start_state: Option<State>, initial_stack_symbol: Symbol) -> Self {
+    pub fn new(
+        start_state: Option<State>,
+        initial_stack_symbol: Symbol,
+        acceptance_condition: BitFlags<AcceptanceCondition>,
+    ) -> Self {
         let start_state = start_state.unwrap_or_default();
         let start_state_id = start_state.id();
 
         Self {
             initial_stack_symbol,
+            acceptance_condition,
             start_state: start_state_id,
             states: indexmap! { start_state_id => start_state },
             final_states: IndexSet::new(),
@@ -198,12 +229,14 @@ impl PushdownAutomaton {
         initial_stack_symbol: &str,
         final_states: &[&str],
         transitions: &[(&str, &str, &str, &[(&[&str], &str)])],
+        acceptance_condition: BitFlags<AcceptanceCondition>,
     ) -> Self {
         let mut state_map = IndexMap::new();
 
         let mut pda = Self::new(
             Some(State::with_name(start_state)),
             Symbol::new(initial_stack_symbol),
+            acceptance_condition,
         );
         state_map.insert(start_state.to_string(), pda.start_state);
 
@@ -265,6 +298,113 @@ impl PushdownAutomaton {
         }
 
         pda
+    }
+
+    pub fn accept_by_empty_stack(&mut self) {
+        if self.acceptance_condition == AcceptanceCondition::EmptyStack {
+            return;
+        }
+
+        let stack_symbols = self
+            .transitions
+            .values()
+            .flat_map(|transitions| {
+                transitions
+                    .keys()
+                    .map(|(_, symbol)| symbol)
+                    .chain(transitions.values().flat_map(|transitions| {
+                        transitions
+                            .iter()
+                            .flat_map(|(_, pushed_stack_symbols)| pushed_stack_symbols)
+                    }))
+                    .filter_map(|symbol| {
+                        if let StackSymbol(SymbolOrEpsilon::Symbol(symbol)) = symbol {
+                            Some(symbol.clone())
+                        } else {
+                            None
+                        }
+                    })
+            })
+            .collect::<IndexSet<_>>();
+
+        let accepting_state = State::with_name("t");
+        let accepting_state_id = accepting_state.id();
+        self.states.insert(accepting_state_id, accepting_state);
+
+        for state in self.final_states.clone() {
+            for stack_symbol in &stack_symbols {
+                self.link(
+                    state,
+                    TapeSymbol(SymbolOrEpsilon::Epsilon),
+                    StackSymbol(SymbolOrEpsilon::Symbol(stack_symbol.clone())),
+                    vec![StackSymbol(SymbolOrEpsilon::Symbol(stack_symbol.clone()))],
+                    accepting_state_id,
+                );
+            }
+        }
+
+        for stack_symbol in &stack_symbols {
+            self.link(
+                accepting_state_id,
+                TapeSymbol(SymbolOrEpsilon::Epsilon),
+                StackSymbol(SymbolOrEpsilon::Symbol(stack_symbol.clone())),
+                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                accepting_state_id,
+            );
+        }
+
+        self.final_states.clear();
+
+        self.acceptance_condition = AcceptanceCondition::EmptyStack.into();
+    }
+
+    pub fn accept_by_final_state(&mut self) {
+        if self.acceptance_condition == AcceptanceCondition::FinalState {
+            return;
+        }
+
+        let old_states = self.states.clone();
+
+        let initial_state: State = State::with_name("u");
+        let initial_state_id = initial_state.id();
+
+        let initial_stack_symbol = Symbol::new("⊥⊥");
+        let old_initial_stack_symbol =
+            mem::replace(&mut self.initial_stack_symbol, initial_stack_symbol.clone());
+
+        self.link(
+            initial_state_id,
+            TapeSymbol(SymbolOrEpsilon::Epsilon),
+            StackSymbol(SymbolOrEpsilon::Symbol(initial_stack_symbol.clone())),
+            vec![
+                StackSymbol(SymbolOrEpsilon::Symbol(old_initial_stack_symbol)),
+                StackSymbol(SymbolOrEpsilon::Symbol(initial_stack_symbol.clone())),
+            ],
+            self.start_state,
+        );
+
+        self.start_state = initial_state_id;
+
+        let accepting_state = State::with_name("t");
+        let accepting_state_id = accepting_state.id();
+
+        for state in old_states.keys().copied() {
+            self.link(
+                state,
+                TapeSymbol(SymbolOrEpsilon::Epsilon),
+                StackSymbol(SymbolOrEpsilon::Symbol(initial_stack_symbol.clone())),
+                vec![StackSymbol(SymbolOrEpsilon::Symbol(
+                    initial_stack_symbol.clone(),
+                ))],
+                accepting_state_id,
+            );
+        }
+
+        self.states.insert(initial_state_id, initial_state);
+        self.states.insert(accepting_state_id, accepting_state);
+        self.make_final(accepting_state_id);
+
+        self.acceptance_condition = AcceptanceCondition::FinalState.into();
     }
 
     fn make_final(&mut self, state: StateId) {

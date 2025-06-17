@@ -2,6 +2,11 @@ use std::{borrow::Cow, fmt::Display, hash::Hash};
 
 use derive_more::Display;
 use indexmap::{IndexMap, IndexSet};
+use winnow::{
+    combinator::{alt, eof, opt, preceded, repeat, terminated},
+    token::one_of,
+    Parser, Result,
+};
 
 use crate::language::{Symbol, Word, EPSILON};
 
@@ -98,34 +103,13 @@ pub trait Grammar<L: ProductionWord, R: ProductionWord> {
                 panic!("Invalid production format");
             }
 
-            let lhs = Word(
-                parts[0]
-                    .chars()
-                    .map(|c| {
-                        if c.is_ascii_uppercase() {
-                            ProductionSymbol::NonTerminal(NonTerminal(Symbol::new(c)))
-                        } else {
-                            ProductionSymbol::Terminal(Terminal(Symbol::new(c)))
-                        }
-                    })
-                    .collect(),
-            );
+            let lhs = parse_word(parts[0]).unwrap();
             parts[1].split("|").for_each(|rhs| {
                 let rhs = rhs.trim();
                 if rhs == EPSILON {
                     grammar.add_erasing_production(lhs.clone());
                 } else {
-                    let word = Word(
-                        rhs.chars()
-                            .map(|c| {
-                                if c.is_ascii_uppercase() {
-                                    ProductionSymbol::NonTerminal(NonTerminal(Symbol::new(c)))
-                                } else {
-                                    ProductionSymbol::Terminal(Terminal(Symbol::new(c)))
-                                }
-                            })
-                            .collect(),
-                    );
+                    let word = parse_word(rhs).unwrap();
 
                     grammar.add_production(lhs.clone(), word.clone());
                 }
@@ -218,4 +202,47 @@ pub trait Grammar<L: ProductionWord, R: ProductionWord> {
 
         definition
     }
+}
+
+type Input<'a> = &'a str;
+
+fn parse_word(input: &str) -> Result<Word<ProductionSymbol>, String> {
+    let mut parser = terminated(word, eof);
+
+    let mut parser_input = input;
+
+    let result = parser
+        .parse_next(&mut parser_input)
+        .map_err(|_| format!("Failed to parse word: \"{input}\""));
+
+    result
+}
+
+fn word(input: &mut Input) -> Result<Word<ProductionSymbol>> {
+    repeat(1.., production_symbol).map(Word).parse_next(input)
+}
+
+fn production_symbol(input: &mut Input) -> Result<ProductionSymbol> {
+    alt((
+        non_terminal.map(ProductionSymbol::NonTerminal),
+        terminal.map(ProductionSymbol::Terminal),
+    ))
+    .parse_next(input)
+}
+
+fn non_terminal(input: &mut Input) -> Result<NonTerminal> {
+    (one_of('A'..='Z'), opt(preceded('_', one_of('0'..='9'))))
+        .map(|(letter, index): (char, Option<char>)| {
+            NonTerminal(Symbol::new(match index {
+                Some(i) => format!("{}_{}", letter, i),
+                None => letter.to_string(),
+            }))
+        })
+        .parse_next(input)
+}
+
+fn terminal(input: &mut Input) -> Result<Terminal> {
+    one_of(('a'..='z', '0'..='9'))
+        .map(|c| Terminal(Symbol::new(c)))
+        .parse_next(input)
 }

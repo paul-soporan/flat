@@ -12,7 +12,7 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
-pub struct GnfWord(Terminal, Vec<NonTerminal>);
+pub struct GnfWord(pub Terminal, pub Vec<NonTerminal>);
 
 impl Display for GnfWord {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -124,6 +124,10 @@ impl Grammar<NonTerminal, GnfWord> for GreibachNormalFormGrammar {
 }
 
 impl GreibachNormalFormGrammar {
+    pub fn is_start_symbol_erasable(&self) -> bool {
+        self.is_start_symbol_erasable
+    }
+
     pub fn from_chomsky_normal_form(cnf: &ChomskyNormalFormGrammar) -> Self {
         let non_terminals = cnf
             .productions

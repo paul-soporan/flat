@@ -228,7 +228,7 @@ impl RegularExpression {
     }
 
     pub fn from_dfa(
-        dfa: Dfa,
+        dfa: &Dfa,
     ) -> (
         RegularExpression,
         IndexMap<(usize, usize, usize), RegularExpression>,
@@ -403,8 +403,8 @@ impl FromStr for RegularExpression {
     }
 }
 
-impl From<Dfa> for RegularExpression {
-    fn from(dfa: Dfa) -> Self {
+impl From<&Dfa> for RegularExpression {
+    fn from(dfa: &Dfa) -> Self {
         RegularExpression::from_dfa(dfa).0
     }
 }

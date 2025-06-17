@@ -28,11 +28,11 @@ fn nfa_to_regex() {
     println!("NFA:\n{}", nfa.transition_table());
     println!("NFA Definition:\n{}", nfa.definition());
 
-    let dfa = Dfa::from(nfa);
+    let dfa = Dfa::from(&nfa);
     println!("DFA:\n{}", dfa.transition_table());
     println!("DFA Definition:\n{}", dfa.definition());
 
-    let (r1, intermediary_regexes) = RegularExpression::from_dfa(dfa);
+    let (r1, intermediary_regexes) = RegularExpression::from_dfa(&dfa);
 
     println!("Regular Expression from DFA:\n{}", r1.to_string());
 
@@ -48,12 +48,12 @@ fn regex_to_dfa() {
 
     println!("Regular Expression:\n{}", r.to_string());
 
-    let enfa = EpsilonNfa::from(r);
+    let enfa = EpsilonNfa::from(&r);
 
     println!("Epsilon NFA:\n{}", enfa.transition_table());
     println!("Epsilon NFA Definition:\n{}", enfa.definition());
 
-    let mut nfa = Nfa::from(enfa);
+    let mut nfa = Nfa::from(&enfa);
     println!("NFA:\n{}", nfa.transition_table());
 
     nfa.remove_unreachable_states();
@@ -61,11 +61,11 @@ fn regex_to_dfa() {
     println!("Simpler NFA:\n{}", nfa.transition_table());
     println!("Simpler NFA Definition:\n{}", nfa.definition());
 
-    let dfa = Dfa::from(nfa);
+    let dfa = Dfa::from(&nfa);
     println!("DFA:\n{}", dfa.transition_table());
     println!("DFA Definition:\n{}", dfa.definition());
 
-    let (r1, intermediary_regexes) = RegularExpression::from_dfa(dfa);
+    let (r1, intermediary_regexes) = RegularExpression::from_dfa(&dfa);
 
     println!("Regular Expression from DFA:\n{}", r1.to_string());
 
@@ -143,7 +143,21 @@ fn turing_machine() {
 }
 
 fn pda() {
-    let pda = PushdownAutomaton::from_definition(
+    // let mut pda = PushdownAutomaton::from_definition(
+    //     "q0",
+    //     "⊥",
+    //     &[],
+    //     &[
+    //         ("q0", "a", "⊥", &[(&["a", "⊥"], "q0")]),
+    //         ("q0", "a", "a", &[(&["a", "a"], "q0")]),
+    //         ("q0", "b", "a", &[(&["ε"], "q1")]),
+    //         ("q1", "b", "a", &[(&["ε"], "q1")]),
+    //         ("q1", "ε", "⊥", &[(&["ε"], "q2")]),
+    //     ],
+    //     AcceptanceCondition::EmptyStack.into(),
+    // );
+
+    let mut pda = PushdownAutomaton::from_definition(
         "q0",
         "⊥",
         &["q2"],
@@ -152,10 +166,12 @@ fn pda() {
             ("q0", "a", "a", &[(&["a", "a"], "q0")]),
             ("q0", "b", "a", &[(&["ε"], "q1")]),
             ("q1", "b", "a", &[(&["ε"], "q1")]),
-            ("q1", "ε", "⊥", &[(&["ε"], "q2")]),
+            ("q1", "ε", "⊥", &[(&["⊥"], "q2")]),
         ],
-        AcceptanceCondition::EmptyStack | AcceptanceCondition::FinalState,
+        AcceptanceCondition::FinalState.into(),
     );
+
+    pda.accept_by_empty_stack();
 
     let input = Word(vec![
         Symbol::new("a".to_string()),
@@ -170,11 +186,48 @@ fn pda() {
     println!("Accepted: {}", is_accepted);
 }
 
+fn cfg_to_pda() {
+    let cfg = ContextFreeGrammar::from_productions(
+        "S",
+        &["S → S_1 | S_2", "S_1 → ε | aS_1b", "S_2 → a | bbS_2c"],
+    );
+    let pda = PushdownAutomaton::from(&cfg);
+
+    println!("PDA from CFG:\n");
+    for (from_state, symbol, popped_stack_symbol, pushed_stack_symbols, to_state) in
+        pda.transitions()
+    {
+        println!(
+            "{} --{},{}/{}--> {}",
+            from_state, symbol, popped_stack_symbol, pushed_stack_symbols, to_state
+        );
+    }
+}
+
+fn gnf_to_pda() {
+    let gnf = GreibachNormalFormGrammar::from_productions(
+        "S",
+        &["S → ε | aXZ", "X → bXX | bZ", "Z → a | cZ"],
+    );
+    let pda = PushdownAutomaton::from(&gnf);
+
+    println!("PDA from GNF:\n");
+    for (from_state, symbol, popped_stack_symbol, pushed_stack_symbols, to_state) in
+        pda.transitions()
+    {
+        println!(
+            "{} --{},{}/{}--> {}",
+            from_state, symbol, popped_stack_symbol, pushed_stack_symbols, to_state
+        );
+    }
+}
+
 fn main() {
     // regex_to_dfa();
     // nfa_to_regex();
     // grammars();
     // cyk();
     // turing_machine();
-    pda();
+    // pda();
+    gnf_to_pda();
 }

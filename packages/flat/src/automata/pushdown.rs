@@ -8,6 +8,11 @@ use std::mem;
 
 use crate::{
     automata::types::{State, StateId},
+    grammars::{
+        context_free::ContextFreeGrammar,
+        greibach_normal_form::{GnfWord, GreibachNormalFormGrammar},
+        types::{Grammar, ProductionSymbol},
+    },
     language::{Symbol, SymbolOrEpsilon, Word, EPSILON},
 };
 
@@ -431,5 +436,159 @@ impl PushdownAutomaton {
         let mut id = InstantaneousDescription::initial(self, input.clone());
 
         id.run()
+    }
+
+    pub fn transitions(&self) -> Vec<(&str, String, String, String, &str)> {
+        let mut transitions = Vec::new();
+        for (from_state, to) in &self.transitions {
+            let from_state = self
+                .states
+                .get(from_state)
+                .unwrap()
+                .name()
+                .unwrap_or_else(|| "q?");
+
+            for ((tape_symbol, popped_stack_symbol), to) in to {
+                let tape_symbol = tape_symbol.to_string();
+                let popped_stack_symbol = popped_stack_symbol.to_string();
+
+                for (to_state, pushed_stack_symbols) in to {
+                    let to_state = self.states.get(to_state).unwrap().name().unwrap_or("q?");
+                    let pushed_stack_symbols = pushed_stack_symbols
+                        .iter()
+                        .map(|s| s.to_string())
+                        .collect::<String>();
+
+                    transitions.push((
+                        from_state,
+                        tape_symbol.clone(),
+                        popped_stack_symbol.clone(),
+                        pushed_stack_symbols,
+                        to_state,
+                    ));
+                }
+            }
+        }
+
+        transitions
+    }
+}
+
+impl From<&ContextFreeGrammar> for PushdownAutomaton {
+    fn from(cfg: &ContextFreeGrammar) -> Self {
+        let alphabet = cfg
+            .productions()
+            .values()
+            .flat_map(|words| {
+                words.iter().flat_map(|word| {
+                    word.0.iter().filter_map(|symbol| {
+                        if let ProductionSymbol::Terminal(terminal) = symbol {
+                            Some(terminal)
+                        } else {
+                            None
+                        }
+                    })
+                })
+            })
+            .collect::<IndexSet<_>>();
+
+        let mut pda = PushdownAutomaton::new(
+            Some(State::with_name("q")),
+            cfg.start_symbol().0.clone(),
+            AcceptanceCondition::EmptyStack.into(),
+        );
+
+        for terminal in alphabet {
+            pda.link(
+                pda.start_state,
+                TapeSymbol(SymbolOrEpsilon::Symbol(terminal.0.clone())),
+                StackSymbol(SymbolOrEpsilon::Symbol(terminal.0.clone())),
+                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                pda.start_state,
+            );
+        }
+
+        for (lhs, rhs) in cfg.productions() {
+            let lhs = &lhs.0;
+
+            for word in rhs {
+                pda.link(
+                    pda.start_state,
+                    TapeSymbol(SymbolOrEpsilon::Epsilon),
+                    StackSymbol(SymbolOrEpsilon::Symbol(lhs.clone())),
+                    word.0
+                        .iter()
+                        .map(|symbol| {
+                            let symbol = match symbol {
+                                ProductionSymbol::Terminal(terminal) => &terminal.0,
+                                ProductionSymbol::NonTerminal(non_terminal) => &non_terminal.0,
+                            };
+
+                            StackSymbol(SymbolOrEpsilon::Symbol(symbol.clone()))
+                        })
+                        .collect(),
+                    pda.start_state,
+                );
+            }
+        }
+
+        for lhs in cfg.erasing_productions().iter() {
+            let lhs = &lhs.0;
+
+            pda.link(
+                pda.start_state,
+                TapeSymbol(SymbolOrEpsilon::Epsilon),
+                StackSymbol(SymbolOrEpsilon::Symbol(lhs.clone())),
+                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                pda.start_state,
+            );
+        }
+
+        pda
+    }
+}
+
+impl From<&GreibachNormalFormGrammar> for PushdownAutomaton {
+    fn from(gnf: &GreibachNormalFormGrammar) -> Self {
+        let mut pda = PushdownAutomaton::new(
+            Some(State::with_name("q")),
+            gnf.start_symbol().0.clone(),
+            AcceptanceCondition::EmptyStack.into(),
+        );
+
+        for (lhs, rhs) in gnf.productions() {
+            let lhs = &lhs.0;
+
+            for GnfWord(terminal, non_terminals) in rhs {
+                let pushed_stack_symbols = non_terminals
+                    .iter()
+                    .map(|nt| StackSymbol(SymbolOrEpsilon::Symbol(nt.0.clone())))
+                    .collect::<Vec<_>>();
+
+                pda.link(
+                    pda.start_state,
+                    TapeSymbol(SymbolOrEpsilon::Symbol(terminal.0.clone())),
+                    StackSymbol(SymbolOrEpsilon::Symbol(lhs.clone())),
+                    if pushed_stack_symbols.is_empty() {
+                        vec![StackSymbol(SymbolOrEpsilon::Epsilon)]
+                    } else {
+                        pushed_stack_symbols
+                    },
+                    pda.start_state,
+                );
+            }
+        }
+
+        if gnf.is_start_symbol_erasable() {
+            pda.link(
+                pda.start_state,
+                TapeSymbol(SymbolOrEpsilon::Epsilon),
+                StackSymbol(SymbolOrEpsilon::Symbol(gnf.start_symbol().0.clone())),
+                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                pda.start_state,
+            );
+        }
+
+        pda
     }
 }

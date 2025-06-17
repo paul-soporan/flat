@@ -545,16 +545,16 @@ impl Dfa {
     }
 }
 
-impl From<RegularExpression> for EpsilonNfa {
-    fn from(regex: RegularExpression) -> Self {
+impl From<&RegularExpression> for EpsilonNfa {
+    fn from(regex: &RegularExpression) -> Self {
         match regex {
             RegularExpression::Concatenation(r1, r2) => {
-                let mut first_nfa = EpsilonNfa::from(*r1);
+                let mut first_nfa = EpsilonNfa::from(r1.as_ref());
                 let first_final = first_nfa.final_states[0];
 
                 first_nfa.final_states.clear();
 
-                let second_nfa = EpsilonNfa::from(*r2);
+                let second_nfa = EpsilonNfa::from(r2.as_ref());
                 let second_start = second_nfa.start_state;
                 let second_final = second_nfa.final_states[0];
 
@@ -579,16 +579,20 @@ impl From<RegularExpression> for EpsilonNfa {
                         epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, final_state);
                     }
                     RegularExpression::Symbol(s) => {
-                        epsilon_nfa.link(start_state, SymbolOrEpsilon::Symbol(s), final_state);
+                        epsilon_nfa.link(
+                            start_state,
+                            SymbolOrEpsilon::Symbol(s.clone()),
+                            final_state,
+                        );
                     }
                     RegularExpression::Union(r1, r2) => {
-                        let first_nfa = EpsilonNfa::from(*r1);
+                        let first_nfa = EpsilonNfa::from(r1.as_ref());
                         let first_start = first_nfa.start_state;
                         let first_final = first_nfa.final_states[0];
 
                         epsilon_nfa.use_finite_automaton(first_nfa);
 
-                        let second_nfa = EpsilonNfa::from(*r2);
+                        let second_nfa = EpsilonNfa::from(r2.as_ref());
                         let second_start = second_nfa.start_state;
                         let second_final = second_nfa.final_states[0];
 
@@ -601,7 +605,7 @@ impl From<RegularExpression> for EpsilonNfa {
                         epsilon_nfa.link(second_final, SymbolOrEpsilon::Epsilon, final_state);
                     }
                     RegularExpression::KleeneStar(r) => {
-                        let inner_nfa = EpsilonNfa::from(*r);
+                        let inner_nfa = EpsilonNfa::from(r.as_ref());
                         let inner_start = inner_nfa.start_state;
                         let inner_final = inner_nfa.final_states[0];
 
@@ -614,7 +618,7 @@ impl From<RegularExpression> for EpsilonNfa {
                         epsilon_nfa.link(start_state, SymbolOrEpsilon::Epsilon, final_state);
                     }
                     RegularExpression::Plus(r) => {
-                        let inner_nfa = EpsilonNfa::from(*r);
+                        let inner_nfa = EpsilonNfa::from(r.as_ref());
                         let inner_start = inner_nfa.start_state;
                         let inner_final = inner_nfa.final_states[0];
 
@@ -634,8 +638,8 @@ impl From<RegularExpression> for EpsilonNfa {
     }
 }
 
-impl From<EpsilonNfa> for Nfa {
-    fn from(epsilon_nfa: EpsilonNfa) -> Self {
+impl From<&EpsilonNfa> for Nfa {
+    fn from(epsilon_nfa: &EpsilonNfa) -> Self {
         let mut nfa = Nfa::new(Some(epsilon_nfa.states[&epsilon_nfa.start_state].clone()));
 
         nfa.states.extend(epsilon_nfa.states.clone());
@@ -669,8 +673,8 @@ impl From<EpsilonNfa> for Nfa {
     }
 }
 
-impl From<Nfa> for Dfa {
-    fn from(nfa: Nfa) -> Self {
+impl From<&Nfa> for Dfa {
+    fn from(nfa: &Nfa) -> Self {
         let start_state_set = BTreeSet::from([nfa.start_state]);
 
         let mut dfa = Dfa::new(None);

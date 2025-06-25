@@ -197,6 +197,12 @@ impl Display for CykTable {
 
         writeln!(
             f,
+            "{{Z ∈ V | Z => w}} = {{{}}}",
+            self.table[0][self.table.len() - 1].iter().join(", ")
+        )?;
+
+        writeln!(
+            f,
             "The word \"{}\" is {} in the language defined by the grammar, as the start symbol {} {} in the top-right cell.",
             self.word,
             if self.is_word_in_language() {
@@ -209,6 +215,18 @@ impl Display for CykTable {
                 "is"
             } else {
                 "is not"
+            }
+        )?;
+
+        writeln!(
+            f,
+            "w {is} L(G) because {} {is} {{{}}} = {{Z ∈ V | Z => w}}",
+            self.start_symbol,
+            self.table[0][self.table.len() - 1].iter().join(", "),
+            is = if self.is_word_in_language() {
+                "∈"
+            } else {
+                "∉"
             }
         )?;
 

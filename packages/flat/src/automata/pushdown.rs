@@ -7,7 +7,7 @@ use itertools::Itertools;
 use std::mem;
 
 use crate::{
-    automata::types::{State, StateId},
+    automata::types::{Automaton, State, StateId},
     grammars::{
         context_free::ContextFreeGrammar,
         greibach_normal_form::{GnfWord, GreibachNormalFormGrammar},
@@ -20,7 +20,7 @@ use crate::{
 struct TapeSymbol(SymbolOrEpsilon);
 
 #[derive(Debug, Display, Clone, PartialEq, Eq, Hash)]
-struct StackSymbol(SymbolOrEpsilon);
+struct StackSymbol(Symbol);
 
 #[bitflags]
 #[repr(u8)]
@@ -86,16 +86,13 @@ impl<'a> InstantaneousDescription<'a> {
             self.tape_index += 1;
         }
 
-        for symbol in pushed_stack_symbols.iter().rev() {
-            match symbol {
-                StackSymbol(SymbolOrEpsilon::Epsilon) => continue,
-                StackSymbol(SymbolOrEpsilon::Symbol(s)) => self.stack.push(s.clone()),
-            }
+        for StackSymbol(s) in pushed_stack_symbols.iter().rev() {
+            self.stack.push(s.clone())
         }
     }
 
-    fn run(&mut self) -> bool {
-        println!("{}", self);
+    fn run(&mut self, run: &mut Run) -> bool {
+        run.add_id(self);
 
         if self.is_accepting() {
             return true;
@@ -120,14 +117,14 @@ impl<'a> InstantaneousDescription<'a> {
             .map(|current_tape_symbol| {
                 state_transitions.get(&(
                     TapeSymbol(SymbolOrEpsilon::Symbol(current_tape_symbol)),
-                    StackSymbol(SymbolOrEpsilon::Symbol(current_stack_symbol.clone())),
+                    StackSymbol(current_stack_symbol.clone()),
                 ))
             })
             .flatten();
 
         let epsilon_transitions = state_transitions.get(&(
             TapeSymbol(SymbolOrEpsilon::Epsilon),
-            StackSymbol(SymbolOrEpsilon::Symbol(current_stack_symbol)),
+            StackSymbol(current_stack_symbol),
         ));
 
         let transitions = tape_transitions
@@ -161,7 +158,7 @@ impl<'a> InstantaneousDescription<'a> {
             for transition in transitions {
                 self.use_transition(&transition);
 
-                if self.run() {
+                if self.run(&mut run.clone()) {
                     return true;
                 }
 
@@ -173,7 +170,7 @@ impl<'a> InstantaneousDescription<'a> {
 
         self.use_transition(&first_transition);
 
-        return self.run();
+        return self.run(run);
     }
 }
 
@@ -193,9 +190,81 @@ impl Display for InstantaneousDescription<'_> {
             if self.stack.is_empty() {
                 EPSILON.to_string()
             } else {
-                self.stack.iter().join("")
+                self.stack.iter().rev().join("")
             }
         )
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Run {
+    input: String,
+    accepted: bool,
+    instantaneous_descriptions: Vec<String>,
+}
+
+impl Run {
+    pub fn accepted(&self) -> bool {
+        self.accepted
+    }
+
+    fn add_id(&mut self, id: &InstantaneousDescription) {
+        self.instantaneous_descriptions.push(id.to_string());
+    }
+}
+
+impl Display for Run {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Let M be an NPDA.\n")?;
+        writeln!(f, "w = {}\n", self.input)?;
+
+        writeln!(
+            f,
+            r#"<style>
+                .strikethrough {{
+                    position: relative;
+                }}
+
+                .strikethrough:before {{
+                    position: absolute;
+                    content: "";
+                    left: 0;
+                    top: 50%;
+                    right: 0;
+                    border-top: 1px solid;
+                    border-color: inherit;
+                    transform:rotate(-60deg);
+                }}
+            </style>"#
+        )?;
+
+        writeln!(f, "The run of M on w:\n")?;
+        write!(
+            f,
+            "{}",
+            self.instantaneous_descriptions.join("  ↦<sub>M</sub>  ")
+        )?;
+
+        if !self.accepted() {
+            write!(f, "  <span class=\"strikethrough\">↦</span><sub>M</sub>")?;
+        }
+
+        writeln!(
+            f,
+            "\n\n{} as it is {} by M.",
+            if self.accepted() {
+                "w ∈ L(M)"
+            } else {
+                "w ∉ L(M)"
+            },
+            if self.accepted {
+                "accepted"
+            } else {
+                "not accepted"
+            }
+        )?;
+
+        Ok(())
     }
 }
 
@@ -208,6 +277,12 @@ pub struct PushdownAutomaton {
     transitions:
         IndexMap<StateId, IndexMap<(TapeSymbol, StackSymbol), Vec<(StateId, Vec<StackSymbol>)>>>,
     acceptance_condition: BitFlags<AcceptanceCondition>,
+}
+
+impl Automaton for PushdownAutomaton {
+    fn make_final(&mut self, state: StateId) {
+        self.final_states.insert(state);
+    }
 }
 
 impl PushdownAutomaton {
@@ -269,10 +344,7 @@ impl PushdownAutomaton {
                 s => SymbolOrEpsilon::Symbol(Symbol::new(s.to_string())),
             });
 
-            let popped_stack_symbol = StackSymbol(match popped_stack_symbol {
-                EPSILON => SymbolOrEpsilon::Epsilon,
-                s => SymbolOrEpsilon::Symbol(Symbol::new(s)),
-            });
+            let popped_stack_symbol = StackSymbol(Symbol::new(popped_stack_symbol));
 
             for (pushed_stack_symbols, to_state) in to.iter().copied() {
                 let to_state = *state_map.entry(to_state.to_string()).or_insert_with(|| {
@@ -284,13 +356,8 @@ impl PushdownAutomaton {
 
                 let pushed_stack_symbols = pushed_stack_symbols
                     .iter()
-                    .map(|s| {
-                        StackSymbol(match *s {
-                            EPSILON => SymbolOrEpsilon::Epsilon,
-                            s => SymbolOrEpsilon::Symbol(Symbol::new(s.to_string())),
-                        })
-                    })
-                    .collect();
+                    .map(|&s| StackSymbol(Symbol::new(s)))
+                    .collect::<Vec<_>>();
 
                 pda.link(
                     from_state,
@@ -322,13 +389,7 @@ impl PushdownAutomaton {
                             .iter()
                             .flat_map(|(_, pushed_stack_symbols)| pushed_stack_symbols)
                     }))
-                    .filter_map(|symbol| {
-                        if let StackSymbol(SymbolOrEpsilon::Symbol(symbol)) = symbol {
-                            Some(symbol.clone())
-                        } else {
-                            None
-                        }
-                    })
+                    .map(|symbol| symbol.0.clone())
             })
             .collect::<IndexSet<_>>();
 
@@ -341,8 +402,8 @@ impl PushdownAutomaton {
                 self.link(
                     state,
                     TapeSymbol(SymbolOrEpsilon::Epsilon),
-                    StackSymbol(SymbolOrEpsilon::Symbol(stack_symbol.clone())),
-                    vec![StackSymbol(SymbolOrEpsilon::Symbol(stack_symbol.clone()))],
+                    StackSymbol(stack_symbol.clone()),
+                    vec![StackSymbol(stack_symbol.clone())],
                     accepting_state_id,
                 );
             }
@@ -352,8 +413,8 @@ impl PushdownAutomaton {
             self.link(
                 accepting_state_id,
                 TapeSymbol(SymbolOrEpsilon::Epsilon),
-                StackSymbol(SymbolOrEpsilon::Symbol(stack_symbol.clone())),
-                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                StackSymbol(stack_symbol.clone()),
+                Vec::new(),
                 accepting_state_id,
             );
         }
@@ -380,10 +441,10 @@ impl PushdownAutomaton {
         self.link(
             initial_state_id,
             TapeSymbol(SymbolOrEpsilon::Epsilon),
-            StackSymbol(SymbolOrEpsilon::Symbol(initial_stack_symbol.clone())),
+            StackSymbol(initial_stack_symbol.clone()),
             vec![
-                StackSymbol(SymbolOrEpsilon::Symbol(old_initial_stack_symbol)),
-                StackSymbol(SymbolOrEpsilon::Symbol(initial_stack_symbol.clone())),
+                StackSymbol(old_initial_stack_symbol),
+                StackSymbol(initial_stack_symbol.clone()),
             ],
             self.start_state,
         );
@@ -397,10 +458,8 @@ impl PushdownAutomaton {
             self.link(
                 state,
                 TapeSymbol(SymbolOrEpsilon::Epsilon),
-                StackSymbol(SymbolOrEpsilon::Symbol(initial_stack_symbol.clone())),
-                vec![StackSymbol(SymbolOrEpsilon::Symbol(
-                    initial_stack_symbol.clone(),
-                ))],
+                StackSymbol(initial_stack_symbol.clone()),
+                vec![StackSymbol(initial_stack_symbol.clone())],
                 accepting_state_id,
             );
         }
@@ -410,10 +469,6 @@ impl PushdownAutomaton {
         self.make_final(accepting_state_id);
 
         self.acceptance_condition = AcceptanceCondition::FinalState.into();
-    }
-
-    fn make_final(&mut self, state: StateId) {
-        self.final_states.insert(state);
     }
 
     fn link(
@@ -432,10 +487,20 @@ impl PushdownAutomaton {
             .push((to, pushed_stack_symbols));
     }
 
-    pub fn run(&self, input: &Word<Symbol>) -> bool {
+    pub fn run(&self, input: &Word<Symbol>) -> Run {
         let mut id = InstantaneousDescription::initial(self, input.clone());
 
-        id.run()
+        let mut run = Run {
+            input: input.to_string(),
+            accepted: false,
+            instantaneous_descriptions: Vec::new(),
+        };
+
+        let accepted = id.run(&mut run);
+
+        run.accepted = accepted;
+
+        run
     }
 
     pub fn transitions(&self) -> Vec<(&str, String, String, String, &str)> {
@@ -454,10 +519,14 @@ impl PushdownAutomaton {
 
                 for (to_state, pushed_stack_symbols) in to {
                     let to_state = self.states.get(to_state).unwrap().name().unwrap_or("q?");
-                    let pushed_stack_symbols = pushed_stack_symbols
-                        .iter()
-                        .map(|s| s.to_string())
-                        .collect::<String>();
+                    let pushed_stack_symbols = if pushed_stack_symbols.is_empty() {
+                        EPSILON.to_string()
+                    } else {
+                        pushed_stack_symbols
+                            .iter()
+                            .map(|s| s.to_string())
+                            .collect::<String>()
+                    };
 
                     transitions.push((
                         from_state,
@@ -502,8 +571,8 @@ impl From<&ContextFreeGrammar> for PushdownAutomaton {
             pda.link(
                 pda.start_state,
                 TapeSymbol(SymbolOrEpsilon::Symbol(terminal.0.clone())),
-                StackSymbol(SymbolOrEpsilon::Symbol(terminal.0.clone())),
-                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                StackSymbol(terminal.0.clone()),
+                Vec::new(),
                 pda.start_state,
             );
         }
@@ -515,16 +584,16 @@ impl From<&ContextFreeGrammar> for PushdownAutomaton {
                 pda.link(
                     pda.start_state,
                     TapeSymbol(SymbolOrEpsilon::Epsilon),
-                    StackSymbol(SymbolOrEpsilon::Symbol(lhs.clone())),
+                    StackSymbol(lhs.clone()),
                     word.0
                         .iter()
                         .map(|symbol| {
-                            let symbol = match symbol {
-                                ProductionSymbol::Terminal(terminal) => &terminal.0,
-                                ProductionSymbol::NonTerminal(non_terminal) => &non_terminal.0,
-                            };
-
-                            StackSymbol(SymbolOrEpsilon::Symbol(symbol.clone()))
+                            StackSymbol(match symbol {
+                                ProductionSymbol::Terminal(terminal) => terminal.0.clone(),
+                                ProductionSymbol::NonTerminal(non_terminal) => {
+                                    non_terminal.0.clone()
+                                }
+                            })
                         })
                         .collect(),
                     pda.start_state,
@@ -538,8 +607,8 @@ impl From<&ContextFreeGrammar> for PushdownAutomaton {
             pda.link(
                 pda.start_state,
                 TapeSymbol(SymbolOrEpsilon::Epsilon),
-                StackSymbol(SymbolOrEpsilon::Symbol(lhs.clone())),
-                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                StackSymbol(lhs.clone()),
+                Vec::new(),
                 pda.start_state,
             );
         }
@@ -560,20 +629,14 @@ impl From<&GreibachNormalFormGrammar> for PushdownAutomaton {
             let lhs = &lhs.0;
 
             for GnfWord(terminal, non_terminals) in rhs {
-                let pushed_stack_symbols = non_terminals
-                    .iter()
-                    .map(|nt| StackSymbol(SymbolOrEpsilon::Symbol(nt.0.clone())))
-                    .collect::<Vec<_>>();
-
                 pda.link(
                     pda.start_state,
                     TapeSymbol(SymbolOrEpsilon::Symbol(terminal.0.clone())),
-                    StackSymbol(SymbolOrEpsilon::Symbol(lhs.clone())),
-                    if pushed_stack_symbols.is_empty() {
-                        vec![StackSymbol(SymbolOrEpsilon::Epsilon)]
-                    } else {
-                        pushed_stack_symbols
-                    },
+                    StackSymbol(lhs.clone()),
+                    non_terminals
+                        .iter()
+                        .map(|nt| StackSymbol(nt.0.clone()))
+                        .collect::<Vec<_>>(),
                     pda.start_state,
                 );
             }
@@ -583,8 +646,8 @@ impl From<&GreibachNormalFormGrammar> for PushdownAutomaton {
             pda.link(
                 pda.start_state,
                 TapeSymbol(SymbolOrEpsilon::Epsilon),
-                StackSymbol(SymbolOrEpsilon::Symbol(gnf.start_symbol().0.clone())),
-                vec![StackSymbol(SymbolOrEpsilon::Epsilon)],
+                StackSymbol(gnf.start_symbol().0.clone()),
+                Vec::new(),
                 pda.start_state,
             );
         }

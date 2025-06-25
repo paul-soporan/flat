@@ -66,3 +66,9 @@ impl<S> IntoIterator for Word<S> {
         self.0.into_iter()
     }
 }
+
+impl From<&str> for Word<Symbol> {
+    fn from(s: &str) -> Self {
+        Self(s.chars().map(Symbol::new).collect())
+    }
+}

@@ -23,9 +23,19 @@ impl State {
     }
 
     pub fn with_name(name: impl Into<String>) -> Self {
+        let mut name = name.into();
+
+        if name.len() > 1
+            && name.chars().next().unwrap().is_alphabetic()
+            && name.chars().skip(1).all(|c| c.is_numeric())
+        {
+            name.insert_str(1, "<sub>");
+            name.push_str("</sub>");
+        };
+
         Self {
             id: StateId(Uuid::new_v4()),
-            name: Some(name.into()),
+            name: Some(name),
         }
     }
 
@@ -61,4 +71,8 @@ impl AutomatonSymbol for SymbolOrEpsilon {
             SymbolOrEpsilon::Symbol(s) => s.as_str(),
         }
     }
+}
+
+pub trait Automaton {
+    fn make_final(&mut self, state: StateId);
 }

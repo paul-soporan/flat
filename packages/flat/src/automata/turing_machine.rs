@@ -1,9 +1,10 @@
 use std::{collections::VecDeque, fmt::Display};
 
 use indexmap::{indexmap, IndexMap, IndexSet};
+use itertools::Itertools;
 
 use crate::{
-    automata::types::{State, StateId},
+    automata::types::{Automaton, State, StateId},
     language::{Symbol, Word},
 };
 
@@ -143,16 +144,94 @@ impl Display for InstantaneousDescription<'_> {
             .cells
             .iter()
             .map(ToString::to_string)
-            .collect::<Vec<_>>();
+            .collect::<VecDeque<_>>();
 
         let current_state = self.turing_machine.states.get(&self.state).unwrap();
 
         symbols.insert(
             tape.head_position as usize,
-            format!("{{{}}}", current_state.name().unwrap_or_else(|| "q?")),
+            format!("{}", current_state.name().unwrap_or_else(|| "q?")),
         );
 
-        write!(f, "{}", symbols.join(""))
+        while symbols.front() == Some(&BLANK_SYMBOL.to_string()) {
+            symbols.pop_front();
+        }
+
+        while symbols.back() == Some(&BLANK_SYMBOL.to_string())
+            && symbols.len() > (tape.head_position + 1) as usize
+        {
+            symbols.pop_back();
+        }
+
+        write!(f, "{}", symbols.iter().join(""))
+    }
+}
+
+#[derive(Debug)]
+pub struct Run {
+    input: String,
+    accepted: bool,
+    instantaneous_descriptions: Vec<String>,
+}
+
+impl Run {
+    pub fn accepted(&self) -> bool {
+        self.accepted
+    }
+
+    fn add_id(&mut self, id: &InstantaneousDescription) {
+        self.instantaneous_descriptions.push(id.to_string());
+    }
+}
+
+impl Display for Run {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        writeln!(f, "Let M be the turing machine.\n")?;
+        writeln!(f, "w = {}\n", self.input)?;
+
+        writeln!(
+            f,
+            r#"<style>
+                .strikethrough {{
+                    position: relative;
+                }}
+
+                .strikethrough:before {{
+                    position: absolute;
+                    content: "";
+                    left: 0;
+                    top: 50%;
+                    right: 0;
+                    border-top: 1px solid;
+                    border-color: inherit;
+                    transform:rotate(-60deg);
+                }}
+            </style>"#
+        )?;
+
+        writeln!(f, "The run of M on w:\n")?;
+        write!(
+            f,
+            "{}",
+            self.instantaneous_descriptions.join("  ↦<sub>M</sub>  ")
+        )?;
+
+        if !self.accepted {
+            write!(f, "  <span class=\"strikethrough\">↦</span><sub>M</sub>")?;
+        }
+
+        writeln!(
+            f,
+            "\n\nThe run halts in a {} state of M, thus {}.",
+            if self.accepted { "final" } else { "non-final" },
+            if self.accepted {
+                "w ∈ L(M)"
+            } else {
+                "w ∉ L(M)"
+            }
+        )?;
+
+        Ok(())
     }
 }
 
@@ -162,6 +241,12 @@ pub struct TuringMachine {
     start_state: StateId,
     final_states: IndexSet<StateId>,
     transitions: IndexMap<StateId, IndexMap<TapeSymbol, (StateId, TapeSymbol, TapeHeadMovement)>>,
+}
+
+impl Automaton for TuringMachine {
+    fn make_final(&mut self, state: StateId) {
+        self.final_states.insert(state);
+    }
 }
 
 impl TuringMachine {
@@ -175,10 +260,6 @@ impl TuringMachine {
             final_states: IndexSet::new(),
             transitions: IndexMap::new(),
         }
-    }
-
-    fn make_final(&mut self, state: StateId) {
-        self.final_states.insert(state);
     }
 
     fn link(
@@ -253,21 +334,29 @@ impl TuringMachine {
         tm
     }
 
-    pub fn run(&self, input: &Word<Symbol>) -> bool {
+    pub fn run(&self, input: &Word<Symbol>) -> Run {
         let mut id = InstantaneousDescription::initial(
             self,
             input.clone().into_iter().map(|s| TapeSymbol::Symbol(s)),
         );
 
+        let mut run = Run {
+            input: input.to_string(),
+            accepted: false,
+            instantaneous_descriptions: Vec::new(),
+        };
+
         loop {
-            println!("{}", id);
+            run.add_id(&id);
 
             if id.is_final() {
-                return true;
+                run.accepted = true;
+                return run;
             }
 
             if !id.make_move() {
-                return false;
+                run.accepted = false;
+                return run;
             }
         }
     }

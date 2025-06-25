@@ -92,26 +92,24 @@ fn grammars() {
 }
 
 fn cyk() {
-    // let cfg = ContextFreeGrammar::from_productions(
-    //     "S",
-    //     &[
-    //         "S → TT | AC",
-    //         "T → AC | DA | AB | BA",
-    //         "C → XB",
-    //         "D → BX",
-    //         "X → TT | AB | BA",
-    //         "A → a",
-    //         "B → b",
-    //     ],
-    // );
+    let cnf = ChomskyNormalFormGrammar::from_productions(
+        "S",
+        &[
+            "S → TT | AC",
+            "T → AC | DA | AB | BA",
+            "C → XB",
+            "D → BX",
+            "X → TT | AB | BA",
+            "A → a",
+            "B → b",
+        ],
+    );
 
-    // let cnf = cfg.to_chomsky_normal_form();
-
-    // let table = cnf.cyk("baabab");
-    // println!("{}", table);
+    let table = cnf.cyk("baabab");
+    println!("{}", table);
 }
 
-fn turing_machine() {
+fn turing_machine_session_example_1() {
     let tm = TuringMachine::from_definition(
         "q0",
         &["q4"],
@@ -129,17 +127,36 @@ fn turing_machine() {
         ],
     );
 
-    let input = Word(vec![
-        Symbol::new("0".to_string()),
-        Symbol::new("0".to_string()),
-        Symbol::new("1".to_string()),
-        Symbol::new("1".to_string()),
-        Symbol::new("1".to_string()),
-    ]);
+    let input = Word::from("00111");
 
-    let is_accepted = tm.run(&input);
-    println!("Input: {}", input);
-    println!("Accepted: {}", is_accepted);
+    let run = tm.run(&input);
+    println!("{}", run);
+}
+
+fn turing_machine_session_example_2() {
+    let tm = TuringMachine::from_definition(
+        "q1",
+        &["qa"],
+        &[
+            ("q1", "0", "B", 1, "q2"),
+            ("q2", "X", "X", 1, "q2"),
+            ("q2", "0", "X", 1, "q3"),
+            ("q2", "B", "B", 1, "qa"),
+            ("q3", "X", "X", 1, "q3"),
+            ("q3", "0", "0", 1, "q4"),
+            ("q4", "X", "X", 1, "q4"),
+            ("q4", "0", "X", 1, "q3"),
+            ("q3", "B", "B", -1, "q5"),
+            ("q5", "X", "X", -1, "q5"),
+            ("q5", "0", "0", -1, "q5"),
+            ("q5", "B", "B", 1, "q2"),
+        ],
+    );
+
+    let input = Word::from("000");
+
+    let run = tm.run(&input);
+    println!("{}", run);
 }
 
 fn pda() {
@@ -150,9 +167,9 @@ fn pda() {
     //     &[
     //         ("q0", "a", "⊥", &[(&["a", "⊥"], "q0")]),
     //         ("q0", "a", "a", &[(&["a", "a"], "q0")]),
-    //         ("q0", "b", "a", &[(&["ε"], "q1")]),
-    //         ("q1", "b", "a", &[(&["ε"], "q1")]),
-    //         ("q1", "ε", "⊥", &[(&["ε"], "q2")]),
+    //         ("q0", "b", "a", &[(&[], "q1")]),
+    //         ("q1", "b", "a", &[(&[], "q1")]),
+    //         ("q1", "ε", "⊥", &[(&[], "q2")]),
     //     ],
     //     AcceptanceCondition::EmptyStack.into(),
     // );
@@ -164,8 +181,8 @@ fn pda() {
         &[
             ("q0", "a", "⊥", &[(&["a", "⊥"], "q0")]),
             ("q0", "a", "a", &[(&["a", "a"], "q0")]),
-            ("q0", "b", "a", &[(&["ε"], "q1")]),
-            ("q1", "b", "a", &[(&["ε"], "q1")]),
+            ("q0", "b", "a", &[(&[], "q1")]),
+            ("q1", "b", "a", &[(&[], "q1")]),
             ("q1", "ε", "⊥", &[(&["⊥"], "q2")]),
         ],
         AcceptanceCondition::FinalState.into(),
@@ -173,20 +190,13 @@ fn pda() {
 
     pda.accept_by_empty_stack();
 
-    let input = Word(vec![
-        Symbol::new("a".to_string()),
-        Symbol::new("a".to_string()),
-        Symbol::new("b".to_string()),
-        Symbol::new("b".to_string()),
-        // Symbol::new("b".to_string()),
-    ]);
+    let input = Word::from("aabb");
 
-    let is_accepted = pda.run(&input);
-    println!("Input: {}", input);
-    println!("Accepted: {}", is_accepted);
+    let run = pda.run(&input);
+    println!("{}", run);
 }
 
-fn cfg_to_pda() {
+fn cfg_to_pda_session_example_1() {
     let cfg = ContextFreeGrammar::from_productions(
         "S",
         &["S → S_1 | S_2", "S_1 → ε | aS_1b", "S_2 → a | bbS_2c"],
@@ -204,7 +214,7 @@ fn cfg_to_pda() {
     }
 }
 
-fn gnf_to_pda() {
+fn gnf_to_pda_session_example_1() {
     let gnf = GreibachNormalFormGrammar::from_productions(
         "S",
         &["S → ε | aXZ", "X → bXX | bZ", "Z → a | cZ"],
@@ -222,12 +232,60 @@ fn gnf_to_pda() {
     }
 }
 
+fn pda_session_example_2() {
+    let mut pda = PushdownAutomaton::from_definition(
+        "q0",
+        "⊥",
+        &["q4"],
+        &[
+            ("q0", "a", "⊥", &[(&["a", "⊥"], "q0")]),
+            ("q0", "a", "a", &[(&["a", "a"], "q0")]),
+            ("q0", "b", "a", &[(&["b", "a"], "q1")]),
+            ("q1", "b", "b", &[(&["b", "b"], "q1")]),
+            ("q1", "c", "b", &[(&[], "q2")]),
+            ("q2", "c", "b", &[(&[], "q2")]),
+            ("q2", "d", "a", &[(&[], "q3")]),
+            ("q3", "d", "a", &[(&[], "q3")]),
+            ("q3", "ε", "⊥", &[(&["⊥"], "q4")]),
+        ],
+        AcceptanceCondition::FinalState.into(),
+    );
+
+    let input = Word::from("abbccd");
+
+    let run = pda.run(&input);
+    println!("{}", run);
+}
+
+fn cyk_session_example_2() {
+    let cnf = ChomskyNormalFormGrammar::from_productions(
+        "S",
+        &[
+            "S → ε | c | ZZ | XY | YX",
+            "Z → c | ZZ | XY | YX",
+            "X → a | ZA",
+            "Y → b | ZB",
+            "A → a",
+            "B → b",
+        ],
+    );
+
+    let table = cnf.cyk("aacbb");
+    println!("{}", table);
+}
+
 fn main() {
     // regex_to_dfa();
     // nfa_to_regex();
     // grammars();
-    // cyk();
-    // turing_machine();
     // pda();
-    gnf_to_pda();
+
+    // cfg_to_pda_session_example_1();
+    gnf_to_pda_session_example_1();
+
+    // cyk_session_example_2();
+    // pda_session_example_2();
+
+    // turing_machine_session_example_1();
+    // turing_machine_session_example_2();
 }

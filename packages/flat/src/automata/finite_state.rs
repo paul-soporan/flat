@@ -3,7 +3,7 @@ use std::collections::{BTreeSet, VecDeque};
 use indexmap::{indexmap, IndexMap, IndexSet};
 
 use crate::{
-    automata::types::{AutomatonSymbol, State, StateId},
+    automata::types::{Automaton, AutomatonSymbol, State, StateId},
     language::{Symbol, SymbolOrEpsilon, EPSILON},
     regex::RegularExpression,
 };
@@ -20,6 +20,12 @@ pub struct FiniteAutomaton<S: AutomatonSymbol, T: TransitionResult> {
     pub start_state: StateId,
     pub final_states: IndexSet<StateId>,
     pub transitions: IndexMap<StateId, IndexMap<S, T>>,
+}
+
+impl<S: AutomatonSymbol, T: TransitionResult> Automaton for FiniteAutomaton<S, T> {
+    fn make_final(&mut self, state: StateId) {
+        self.final_states.insert(state);
+    }
 }
 
 impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
@@ -42,10 +48,6 @@ impl<S: AutomatonSymbol, T: TransitionResult> FiniteAutomaton<S, T> {
         self.states.insert(id, state);
 
         id
-    }
-
-    fn make_final(&mut self, state: StateId) {
-        self.final_states.insert(state);
     }
 
     fn use_finite_automaton(&mut self, other: Self) {

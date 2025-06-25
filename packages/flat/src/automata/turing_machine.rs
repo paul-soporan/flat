@@ -153,14 +153,14 @@ impl Display for InstantaneousDescription<'_> {
             format!("{}", current_state.name().unwrap_or_else(|| "q?")),
         );
 
-        while symbols.front() == Some(&BLANK_SYMBOL.to_string()) {
-            symbols.pop_front();
-        }
-
         while symbols.back() == Some(&BLANK_SYMBOL.to_string())
-            && symbols.len() > (tape.head_position + 1) as usize
+            && symbols.len() > (tape.head_position + 2) as usize
         {
             symbols.pop_back();
+        }
+
+        while symbols.front() == Some(&BLANK_SYMBOL.to_string()) {
+            symbols.pop_front();
         }
 
         write!(f, "{}", symbols.iter().join(""))

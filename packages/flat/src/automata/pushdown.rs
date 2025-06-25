@@ -158,7 +158,10 @@ impl<'a> InstantaneousDescription<'a> {
             for transition in transitions {
                 self.use_transition(&transition);
 
-                if self.run(&mut run.clone()) {
+                let mut next_run = run.clone();
+                if self.run(&mut next_run) {
+                    *run = next_run;
+
                     return true;
                 }
 

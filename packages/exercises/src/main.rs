@@ -274,14 +274,85 @@ fn cyk_session_example_2() {
     println!("{}", table);
 }
 
+fn cyk_exam() {
+    let cnf = ChomskyNormalFormGrammar::from_productions(
+        "S",
+        &[
+            "S → AR | AT | BU",
+            "R → XY",
+            "T → YX",
+            "U → XX",
+            "A → a",
+            "B → b",
+            "X → SA | a",
+            "Y → SB | b",
+        ],
+    );
+
+    let table = cnf.cyk("abaaab");
+    println!("{}", table);
+}
+
+fn turing_machine_exam() {
+    let tm = TuringMachine::from_definition(
+        "q0",
+        &["qf"],
+        &[
+            ("q0", "0", "0", 1, "q0"),
+            ("q0", "1", "1", 1, "q0"),
+            ("q0", "B", "B", -1, "q1"),
+            ("q1", "1", "0", -1, "q1"),
+            ("q1", "0", "1", 1, "qf"),
+            ("q1", "B", "B", -1, "qf"),
+        ],
+    );
+
+    let input = Word::from("100");
+
+    let run = tm.run(&input);
+    println!("{}", run);
+}
+
+fn greiback_to_pda_exam() {
+    let gnf = GreibachNormalFormGrammar::from_productions(
+        "S",
+        &[
+            "S → ε | cS | aSBS | bSAS | aSBSC | bSASC",
+            "A → a",
+            "B → b",
+            "C → c",
+        ],
+    );
+    let pda = PushdownAutomaton::from(&gnf);
+
+    println!("PDA from GNF:\n");
+    for (from_state, symbol, popped_stack_symbol, pushed_stack_symbols, to_state) in
+        pda.transitions()
+    {
+        println!(
+            "{} --{},{}/{}--> {}\n",
+            from_state, symbol, popped_stack_symbol, pushed_stack_symbols, to_state
+        );
+    }
+
+    let input = Word::from("caaccbb");
+
+    let run = pda.run(&input);
+    println!("{}", run);
+}
+
 fn main() {
+    // cyk_exam();
+    // turing_machine_exam();
+    greiback_to_pda_exam();
+
     // regex_to_dfa();
     // nfa_to_regex();
     // grammars();
     // pda();
 
     // cfg_to_pda_session_example_1();
-    gnf_to_pda_session_example_1();
+    // gnf_to_pda_session_example_1();
 
     // cyk_session_example_2();
     // pda_session_example_2();
